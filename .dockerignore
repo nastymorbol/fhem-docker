@@ -1,0 +1,7 @@
+.github/
+bin/
+obj/
+.vs/
+.vscode/
+Properies/
+
