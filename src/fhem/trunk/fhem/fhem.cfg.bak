@@ -1,0 +1,33 @@
+attr global logfile ./log/fhem-%Y-%m-%d.log
+attr global modpath .
+attr global verbose 3
+attr global statefile ./log/fhem.save
+
+define WEB FHEMWEB 8083 global
+
+# Fake FileLog entry, to access the fhem log from FHEMWEB 
+define Logfile FileLog ./log/fhem-%Y-%m-%d.log fakelog
+
+define autocreate autocreate
+attr autocreate filelog ./log/%NAME-%Y.log
+
+define eventTypes eventTypes ./log/eventTypes.txt
+
+# Disable this to avoid looking for new USB devices on startup
+define initialUsbCheck notify global:INITIALIZED usb create 
+attr global dnsServer 192.168.65.1
+attr global commandref modular
+attr global mseclog 1
+define DockerImageInfo DockerImageInfo
+attr DockerImageInfo alias Docker Image Info
+attr DockerImageInfo devStateIcon ok:security@green Initialized:system_fhem_reboot@orange .*:message_attention@red
+attr DockerImageInfo group System
+attr DockerImageInfo icon docker
+attr DockerImageInfo room System
+define fhemServerApt AptToDate localhost
+attr fhemServerApt alias System Update Status
+attr fhemServerApt devStateIcon system.updates.available:security@red system.is.up.to.date:security@green:repoSync .*in.progress:system_fhem_reboot@orange errors:message_attention@red
+attr fhemServerApt group Update
+attr fhemServerApt icon debian
+attr fhemServerApt room System
+define telnetPort telnet 7072

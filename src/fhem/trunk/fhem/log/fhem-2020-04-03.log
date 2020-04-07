@@ -1,0 +1,96 @@
+2020.04.03 21:46:34.006 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:46:34.013 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:46:34.013 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:46:34.014 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:46:34.026 1: Including fhem.cfg
+2020.04.03 21:46:36.080 3: WEB: port 8083 opened
+2020.04.03 21:46:36.115 2: eventTypes: loaded 0 events from ./log/eventTypes.txt
+cat: ./.ssh/id_ed25519.pub: No such file or directory
+cat: ./.ssh/id_rsa.pub: No such file or directory
+2020.04.03 21:46:36.274 3: AptToDate (fhemServerApt) - defined
+2020.04.03 21:46:36.286 3: telnetPort: port 7072 opened
+2020.04.03 21:46:36.288 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:46:36.295 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:46:36.296 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:46:36.296 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:46:36.312 1: usb create starting
+2020.04.03 21:46:36.315 1: PERL WARNING: Can't exec "lsusb": No such file or directory at ./FHEM/98_autocreate.pm line 576.
+2020.04.03 21:46:36.328 1: usb create end
+2020.04.03 21:46:36.330 0: Featurelevel: 6
+2020.04.03 21:46:36.331 0: Server started with 9 defined entities (fhem.pl:21573/2020-04-01 perl:5.028001 os:linux user:fhem pid:3763)
+2020.04.03 21:51:02.099 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:51:02.107 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:51:02.108 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:51:02.108 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:51:02.122 1: Including fhem.cfg
+2020.04.03 21:51:04.149 3: WEB: port 8083 opened
+2020.04.03 21:51:04.204 2: eventTypes: loaded 0 events from ./log/eventTypes.txt
+cat: ./.ssh/id_ed25519.pub: No such file or directory
+cat: ./.ssh/id_rsa.pub: No such file or directory
+2020.04.03 21:51:04.358 3: AptToDate (fhemServerApt) - defined
+2020.04.03 21:51:04.370 3: telnetPort: port 7072 opened
+2020.04.03 21:51:04.374 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:51:04.382 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:51:04.383 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:51:04.384 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:51:04.403 1: usb create starting
+2020.04.03 21:51:04.406 1: PERL WARNING: Can't exec "lsusb": No such file or directory at ./FHEM/98_autocreate.pm line 576.
+2020.04.03 21:51:04.417 1: usb create end
+2020.04.03 21:51:04.418 0: Featurelevel: 6
+2020.04.03 21:51:04.419 0: Server started with 9 defined entities (fhem.pl:21573/2020-04-01 perl:5.028001 os:linux user:fhem pid:3736)
+2020.04.03 21:54:20.186 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:54:20.187 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:54:20.188 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:54:20.188 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:54:20.223 1: Including fhem.cfg
+2020.04.03 21:54:22.063 3: WEB: port 8083 opened
+2020.04.03 21:54:22.102 2: eventTypes: loaded 0 events from ./log/eventTypes.txt
+cat: ./.ssh/id_ed25519.pub: No such file or directory
+cat: ./.ssh/id_rsa.pub: No such file or directory
+2020.04.03 21:54:22.236 3: AptToDate (fhemServerApt) - defined
+2020.04.03 21:54:22.247 3: telnetPort: port 7072 opened
+2020.04.03 21:54:22.249 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:54:22.250 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:54:22.251 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:54:22.251 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:54:22.274 1: usb create starting
+2020.04.03 21:54:22.276 1: PERL WARNING: Can't exec "lsusb": No such file or directory at ./FHEM/98_autocreate.pm line 576.
+2020.04.03 21:54:22.286 1: usb create end
+2020.04.03 21:54:22.287 0: Featurelevel: 6
+2020.04.03 21:54:22.287 0: Server started with 9 defined entities (fhem.pl:21573/2020-04-01 perl:5.028001 os:linux user:fhem pid:3737)
+2020.04.03 21:59:22.008 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:59:22.009 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:59:22.010 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:59:22.010 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:59:22.028 1: Including fhem.cfg
+2020.04.03 21:59:23.797 3: WEB: port 8083 opened
+2020.04.03 21:59:23.830 2: eventTypes: loaded 0 events from ./log/eventTypes.txt
+cat: ./.ssh/id_ed25519.pub: No such file or directory
+cat: ./.ssh/id_rsa.pub: No such file or directory
+2020.04.03 21:59:23.976 3: AptToDate (fhemServerApt) - defined
+2020.04.03 21:59:24.011 3: telnetPort: port 7072 opened
+2020.04.03 21:59:24.013 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 21:59:24.013 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 21:59:24.013 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 21:59:24.014 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 21:59:24.037 1: usb create starting
+2020.04.03 21:59:24.053 1: usb create end
+2020.04.03 21:59:24.054 0: Featurelevel: 6
+2020.04.03 21:59:24.054 0: Server started with 9 defined entities (fhem.pl:21573/2020-04-01 perl:5.028001 os:linux user:fhem pid:3749)
+2020.04.03 22:04:23.953 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 22:04:23.954 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 22:04:23.954 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 22:04:23.961 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 22:04:23.972 1: Including fhem.cfg
+2020.04.03 22:04:25.686 3: WEB: port 8083 opened
+2020.04.03 22:04:25.719 2: eventTypes: loaded 0 events from ./log/eventTypes.txt
+2020.04.03 22:04:25.847 3: AptToDate (fhemServerApt) - defined
+2020.04.03 22:04:25.857 3: telnetPort: port 7072 opened
+2020.04.03 22:04:25.860 3: From the FHEM_GLOBALATTR environment: attr global updateInBackground 1
+2020.04.03 22:04:25.860 3: From the FHEM_GLOBALATTR environment: attr global nofork 0
+2020.04.03 22:04:25.861 3: From the FHEM_GLOBALATTR environment: attr global logfile ./log/fhem-%Y-%m-%d.log
+2020.04.03 22:04:25.867 3: From the FHEM_GLOBALATTR environment: attr global pidfilename ./log/fhem.pid
+2020.04.03 22:04:25.884 1: usb create starting
+2020.04.03 22:04:25.899 1: usb create end
+2020.04.03 22:04:25.900 0: Featurelevel: 6
+2020.04.03 22:04:25.900 0: Server started with 9 defined entities (fhem.pl:21573/2020-04-01 perl:5.028001 os:linux user:fhem pid:3754)
