@@ -5,3 +5,4 @@ fhem/backup/*
 fhem/cache/*
 fhem/log/*
 fhem/restoreDir/*
+src/fhem/*
