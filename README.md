@@ -1,4 +1,13 @@
 
+# This is a forked copy from the official FHEM Docker Image
+For Size reductin of the resulting Image the BASE Image is changed from DEBIAN to Alpine
+
+This Repo is only for experimantal use!!!
+
+```console
+docker pull nastymorbole/fhem:alpine
+```
+
 # Basic Docker image for FHEM
 
 A basic Docker image for [FHEM](https://fhem.de/) house automation system, based on Debian Buster.
