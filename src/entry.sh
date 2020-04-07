@@ -34,33 +34,6 @@ CPAN_PKGS="${CPAN_PKGS:-}"
 PIP_PKGS="${PIP_PKGS:-}"
 NPM_PKGS="${NPM_PKGS:-}"
 
-[ ! -f /image_info.EMPTY ] && touch /image_info.EMPTY
-
-# Collect info about container
-ip link add dummy0 type dummy >/dev/null 2>&1
-if [[ $? -eq 0 ]]; then
-  echo 1 > /docker.privileged
-  ip link delete dummy0 >/dev/null
-  export DOCKER_PRIVILEGED=1
-else
-  echo 0 > /docker.privileged
-  export DOCKER_PRIVILEGED=0
-fi
-ip -4 addr show docker0 >/dev/null 2>&1
-if [[ $? -eq 0 ]]; then
-  echo 1 > /docker.hostnetwork
-  export DOCKER_HOSTNETWORK=1
-  unset DOCKER_HOST
-  unset DOCKER_GW
-else
-  echo 0 > /docker.hostnetwork
-  export DOCKER_HOSTNETWORK=0
-fi
-cat /proc/self/cgroup | grep "memory:" | cut -d "/" -f 3 > /docker.container.id
-captest --text | grep -P "^Effective:" | cut -d " " -f 2- | sed "s/, /\n/g" | sort | sed ':a;N;$!ba;s/\n/,/g' > /docker.container.cap.e
-captest --text | grep -P "^Permitted:" | cut -d " " -f 2- | sed "s/, /\n/g" | sort | sed ':a;N;$!ba;s/\n/,/g' > /docker.container.cap.p
-captest --text | grep -P "^Inheritable:" | cut -d " " -f 2- | sed "s/, /\n/g" | sort | sed ':a;N;$!ba;s/\n/,/g' > /docker.container.cap.i
-
 # This is a brand new container
 if [ -d "/fhem" ]; then
   echo "Preparing initial start:"
@@ -68,135 +41,54 @@ if [ -d "/fhem" ]; then
 
   [ -s "${FHEM_DIR}/fhem.pl" ] && FHEM_CLEANINSTALL=0
 
-  if [ -s /pre-init.sh ]; then
-    echo "$i. Running /pre-init.sh script"
-    chmod 755 /pre-init.sh
-    DEBIAN_FRONTEND=noninteractive LC_ALL=C /pre-init.sh
-    (( i++ ))
-  fi
-
-  if [ -d /docker ] && [ -s /docker/pre-init.sh ]; then
-    echo "$i. Running /docker/pre-init.sh script"
-    chmod 755 /docker/pre-init.sh
-    DEBIAN_FRONTEND=noninteractive LC_ALL=C /docker/pre-init.sh
-    (( i++ ))
-  fi
-
   if [ "${APT_PKGS}" != '' ]; then
     echo "$i. Adding custom APT packages to container ..."
-    DEBIAN_FRONTEND=noninteractive apt-get update >>/pkgs.apt 2>&1
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    apk add \
       ${APT_PKGS} \
-    >>/pkgs.apt 2>&1
-    (( i++ ))
+    >>/pkgs.apt 
+    i=$((i+1))
   fi
 
   if [ "${CPAN_PKGS}" != '' ]; then
     if [ ! -e /usr/bin/cpanm ] && [ ! -e /usr/local/bin/cpanm ]; then
-      echo "$i. Installing cpanminus ..."
-      DEBIAN_FRONTEND=noninteractive apt-get update >>/pkgs.cpanm 2>&1
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        cpanminus \
-      >>/pkgs.cpanm 2>&1
-      (( i++ ))
+      echo "$i. Installing cpanminus ..."      
+      apk add \
+        perl-app-cpanminus \
+      >>/pkgs.cpanm 
+      i=$((i+1))
     fi
 
     echo "$i. Adding custom Perl modules to container ..."
     cpanm --notest \
       ${CPAN_PKGS} \
-    >>/pkgs.cpanm 2>&1
-    (( i++ ))
-  fi
-
-  if [ "${PIP_PKGS}" != '' ]; then
-    if [ ! -e /usr/bin/pip3 ]; then
-      echo "$i. Installing pip3 ..."
-      DEBIAN_FRONTEND=noninteractive apt-get update >>/pkgs.pip 2>&1
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-      >>/pkgs.pip 2>&1
-      (( i++ ))
-    fi
-
-    echo "$i. Adding custom Python modules to container ..."
-    pip3 install \
-      ${PIP_PKGS} \
-    >>/pkgs.pip 2>&1
-    (( i++ ))
-  fi
-
-  if [ "${NPM_PKGS}" != '' ]; then
-    if [ ! -e /usr/bin/npm ]; then
-      MTYPE=$(uname -m)
-      if [ "${MTYPE}" = 'arm32v5' ]; then
-        echo "ERROR: Missing Node.js for ${MTYPE} platform cannot be installed automatically"
-        exit 1
-      fi
-
-      echo "$i. Adding APT sources for Node.js ..."
-      if [ "${MTYPE}" = "i386" ]; then
-        curl -fsSL https://deb.nodesource.com/setup_8.x | bash - >>/pkgs.npm 2>&1
-      else
-        curl -fsSL https://deb.nodesource.com/setup_10.x | bash - >>/pkgs.npm 2>&1
-      fi
-      (( i++ ))
-
-      echo "$i. Installing Node.js ..."
-      DEBIAN_FRONTEND=noninteractive apt-get update >>/pkgs.npm 2>&1
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        nodejs \
-      >>/pkgs.npm 2>&1
-      (( i++ ))
-    fi
-
-    echo "$i. Adding custom Node.js packages to container ..."
-    npm install -g --unsafe-perm --production \
-      ${NPM_PKGS} \
-    >>/pkgs.npm 2>&1
-    (( i++ ))
+    >>/pkgs.cpanm 
+    i=$((i+1))
   fi
 
   if [ "${FHEM_CLEANINSTALL}" = '1' ]; then
-    echo "$i. Installing FHEM to ${FHEM_DIR}"
-    shopt -s dotglob nullglob 2>&1>/dev/null
-    mv -f /fhem/* ${FHEM_DIR}/ 2>&1>/dev/null
-    cd ${FHEM_DIR} 2>&1>/dev/null
+    echo "$i. Installing FHEM to ${FHEM_DIR}"    
+    mv -f /fhem/* ${FHEM_DIR}/ #>/dev/null
+    cd ${FHEM_DIR} >/dev/null
     echo 'http://fhem.de/fhemupdate/controls_fhem.txt' > ./FHEM/controls.txt
-    mv ./controls_fhem.txt ./FHEM/ 2>&1>/dev/null
-    perl ./contrib/commandref_modular.pl 2>&1>/dev/null
+    mv ./controls_fhem.txt ./FHEM/ >/dev/null
+    perl ./contrib/commandref_modular.pl >/dev/null
     cp -f ./fhem.cfg ./fhem.cfg.default
-    (( i++ ))
+    i=$((i+1))
 
     echo "$i. Patching fhem.cfg default configuration"
     [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr global dnsServer')" ] && echo "attr global dnsServer ${DNS}" >> ${FHEM_DIR}/fhem.cfg
     [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr global commandref')" ] && echo "attr global commandref modular" >> ${FHEM_DIR}/fhem.cfg
     [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr global mseclog')" ] && echo "attr global mseclog 1" >> ${FHEM_DIR}/fhem.cfg
-    (( i++ ))
+
+    [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr WEB longpoll')" ] && echo "attr WEB longpoll websocket" >> ${FHEM_DIR}/fhem.cfg
+    [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr WEB csrfToken')" ] && echo "attr WEB csrfToken none" >> ${FHEM_DIR}/fhem.cfg
+    [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr WEB editConfig')" ] && echo "attr WEB editConfig 1" >> ${FHEM_DIR}/fhem.cfg
+    [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr WEB CssFiles')" ] && echo "attr CssFiles pgm2/deosstyle.css" >> ${FHEM_DIR}/fhem.cfg
+    [ -z "$(cat ${FHEM_DIR}/fhem.cfg | grep -P '^attr WEB stylesheetPrefix')" ] && echo "attr stylesheetPrefix default" >> ${FHEM_DIR}/fhem.cfg
+
+    i=$((i+1))
 
     echo "$i. Adding pre-defined devices to fhem.cfg"
-
-    echo "define DockerImageInfo DockerImageInfo" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr DockerImageInfo alias Docker Image Info" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr DockerImageInfo devStateIcon ok:security@green Initialized:system_fhem_reboot@orange .*:message_attention@red" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr DockerImageInfo group System" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr DockerImageInfo icon docker" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr DockerImageInfo room System" >> ${FHEM_DIR}/fhem.cfg
-    echo "define fhemServerApt AptToDate localhost" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr fhemServerApt alias System Update Status" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr fhemServerApt devStateIcon system.updates.available:security@red system.is.up.to.date:security@green:repoSync .*in.progress:system_fhem_reboot@orange errors:message_attention@red" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr fhemServerApt group Update" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr fhemServerApt icon debian" >> ${FHEM_DIR}/fhem.cfg
-    echo "attr fhemServerApt room System" >> ${FHEM_DIR}/fhem.cfg
-
-    if [ -e /usr/bin/npm ]; then
-      echo "define fhemServerNpm npmjs localhost" >> ${FHEM_DIR}/fhem.cfg
-      echo "attr fhemServerNpm alias Node.js Package Update Status" >> ${FHEM_DIR}/fhem.cfg
-      echo "attr fhemServerNpm devStateIcon npm.updates.available:security@red:outdated npm.is.up.to.date:security@green:outdated .*npm.outdated.*in.progress:system_fhem_reboot@orange .*in.progress:system_fhem_update@orange warning.*:message_attention@orange error.*:message_attention@red" >> ${FHEM_DIR}/fhem.cfg
-      echo "attr fhemServerNpm group Update" >> ${FHEM_DIR}/fhem.cfg
-      echo "attr fhemServerNpm icon npm-old" >> ${FHEM_DIR}/fhem.cfg
-      echo "attr fhemServerNpm room System" >> ${FHEM_DIR}/fhem.cfg
-    fi
 
     if [ -e /usr/bin/cpanm ] || [ -e /usr/local/bin/cpanm ]; then
       echo "define fhemInstaller Installer" >> ${FHEM_DIR}/fhem.cfg
@@ -207,29 +99,15 @@ if [ -d "/fhem" ]; then
       echo "attr fhemInstaller room System" >> ${FHEM_DIR}/fhem.cfg
     fi
 
-    cd - 2>&1>/dev/null
+    cd - >/dev/null
   else
     echo "$i. Updating existing FHEM installation in ${FHEM_DIR}"
     [ -s ${FHEM_DIR}/${CONFIGTYPE} ] && cp -f ${FHEM_DIR}/${CONFIGTYPE} ${FHEM_DIR}/${CONFIGTYPE}.bak
     cp -f /fhem/FHEM/99_DockerImageInfo.pm ${FHEM_DIR}/FHEM/
   fi
-  (( i++ ))
+  i=$((i+1))
 
   rm -rf /fhem/
-
-  if [ -s /post-init.sh ]; then
-    echo "$i. Running /post-init.sh script"
-    chmod 755 /post-init.sh
-    DEBIAN_FRONTEND=noninteractive LC_ALL=C /post-init.sh
-    (( i++ ))
-  fi
-
-  if [ -d /docker ] && [ -s /docker/post-init.sh ]; then
-    echo "$i. Running /docker/post-init.sh script"
-    chmod 755 /docker/post-init.sh
-    DEBIAN_FRONTEND=noninteractive LC_ALL=C /docker/post-init.sh
-    (( i++ ))
-  fi
 
   echo -e '\n\n'
 
@@ -276,104 +154,99 @@ cp -f /etc/passwd.orig /etc/passwd
 cp -f /etc/shadow.orig /etc/shadow
 cp -f /etc/group.orig /etc/group
 echo "$i. Creating group 'fhem' with GID ${FHEM_GID} ..."
-groupadd --force --gid ${FHEM_GID} --non-unique fhem 2>&1>/dev/null
-(( i++ ))
-echo "$i. Enforcing GID for group 'bluetooth' to ${BLUETOOTH_GID} ..."
-sed -i "s/^bluetooth\:.*/bluetooth\:x\:${BLUETOOTH_GID}/" /etc/group
-(( i++ ))
+addgroup -g ${FHEM_GID} fhem #>/dev/null
+i=$((i+1))
 echo "$i. Creating user 'fhem' with UID ${FHEM_UID} ..."
-useradd --home ${FHEM_DIR} --shell /bin/bash --uid ${FHEM_UID} --no-create-home --no-user-group --non-unique fhem 2>&1>/dev/null
-usermod --append --gid ${FHEM_GID} --groups ${FHEM_GID} fhem 2>&1>/dev/null
-adduser --quiet fhem audio 2>&1>/dev/null
-adduser --quiet fhem bluetooth 2>&1>/dev/null
-adduser --quiet fhem dialout 2>&1>/dev/null
-adduser --quiet fhem mail 2>&1>/dev/null
-adduser --quiet fhem tty 2>&1>/dev/null
-adduser --quiet fhem video 2>&1>/dev/null
-(( i++ ))
+adduser -h ${FHEM_DIR} -s /bin/sh -u ${FHEM_UID} -H -D -G fhem fhem >/dev/null
+adduser fhem audio >/dev/null
+adduser fhem dialout >/dev/null
+adduser fhem mail >/dev/null
+adduser fhem tty >/dev/null
+adduser fhem video >/dev/null
+i=$((i+1))
 echo "$i. Creating log directory ${LOGFILE%/*} ..."
 mkdir -p "${LOGFILE%/*}"
-(( i++ ))
+i=$((i+1))
 echo "$i. Enforcing user and group ownership for ${FHEM_DIR} to fhem:fhem ..."
-chown --recursive --quiet --no-dereference ${FHEM_UID}:${FHEM_GID} ${FHEM_DIR}/ 2>&1>/dev/null
-chown --recursive --quiet --no-dereference ${FHEM_UID}:${FHEM_GID} ${LOGFILE%/*}/ 2>&1>/dev/null
-(( i++ ))
+chown --recursive --no-dereference ${FHEM_UID}:${FHEM_GID} ${FHEM_DIR}/ #>/dev/null
+chown --recursive --no-dereference ${FHEM_UID}:${FHEM_GID} ${LOGFILE%/*}/ #>/dev/null
+i=$((i+1))
 echo "$i. Enforcing file and directory permissions for ${FHEM_DIR} ..."
-find ${FHEM_DIR}/ -type d -exec chmod --quiet ${FHEM_PERM_DIR} {} \;
-chmod --quiet go-w ${FHEM_DIR}
-find ${FHEM_DIR}/ -type f -exec chmod --quiet ${FHEM_PERM_FILE} {} \;
-find ${FHEM_DIR}/ -type f -name '*.pl' -exec chmod --quiet u+x {} \;
-find ${FHEM_DIR}/ -type f -name '*.py' -exec chmod --quiet u+x {} \;
-find ${FHEM_DIR}/ -type f -name '*.sh' -exec chmod --quiet u+x {} \;
-find ${FHEM_DIR}/ -path '*/bin/*' -type f -exec chmod --quiet u+x {} \;
-find ${FHEM_DIR}/ -path '*/sbin/*' -type f -exec chmod --quiet u+x {} \;
-find ${FHEM_DIR}/ -path '*/*script*/*' -type f -exec chmod --quiet u+x {} \;
-(( i++ ))
+find ${FHEM_DIR}/ -type d -exec chmod ${FHEM_PERM_DIR} {} \;
+chmod go-w ${FHEM_DIR}
+find ${FHEM_DIR}/ -type f -exec chmod ${FHEM_PERM_FILE} {} \;
+find ${FHEM_DIR}/ -type f -name '*.pl' -exec chmod u+x {} \;
+find ${FHEM_DIR}/ -type f -name '*.py' -exec chmod u+x {} \;
+find ${FHEM_DIR}/ -type f -name '*.sh' -exec chmod u+x {} \;
+find ${FHEM_DIR}/ -path '*/bin/*' -type f -exec chmod u+x {} \;
+find ${FHEM_DIR}/ -path '*/sbin/*' -type f -exec chmod u+x {} \;
+find ${FHEM_DIR}/ -path '*/*script*/*' -type f -exec chmod u+x {} \;
+i=$((i+1))
 echo "$i. Correcting group ownership for /dev/tty* ..."
-find /dev/ -regextype sed -regex ".*/tty[0-9]*" -exec chown --recursive --quiet --no-dereference .tty {} \; 2>/dev/null
-find /dev/ -name "ttyS*" -exec chown --recursive --quiet --no-dereference .dialout {} \; 2>/dev/null
-find /dev/ -name "ttyACM*" -exec chown --recursive --quiet --no-dereference .dialout {} \; 2>/dev/null
-find /dev/ -name "ttyUSB*" -exec chown --recursive --quiet --no-dereference .dialout {} \; 2>/dev/null
-find /dev/ -regextype sed -regex ".*/tty[0-9]*" -exec chmod --recursive --quiet g+w {} \; 2>/dev/null
-find /dev/ -name "ttyS*" -exec chmod --recursive --quiet g+rw {} \; 2>/dev/null
-find /dev/ -name "ttyACM*" -exec chmod --recursive --quiet g+rw {} \; 2>/dev/null
-find /dev/ -name "ttyUSB*" -exec chmod --recursive --quiet g+rw {} \; 2>/dev/null
-(( i++ ))
+find /dev/ -regex ".*/tty[0-9]*" -exec chown --recursive --no-dereference .tty {} \; 2>/dev/null
+find /dev/ -name "ttyS*" -exec chown --recursive --no-dereference .dialout {} \; 2>/dev/null
+find /dev/ -name "ttyACM*" -exec chown --recursive --no-dereference .dialout {} \; 2>/dev/null
+find /dev/ -name "ttyUSB*" -exec chown --recursive --no-dereference .dialout {} \; 2>/dev/null
+find /dev/ -regex ".*/tty[0-9]*" -exec chmod --recursive g+w {} \; 2>/dev/null
+find /dev/ -name "ttyS*" -exec chmod --recursive g+rw {} \; 2>/dev/null
+find /dev/ -name "ttyACM*" -exec chmod --recursive g+rw {} \; 2>/dev/null
+find /dev/ -name "ttyUSB*" -exec chmod --recursive g+rw {} \; 2>/dev/null
+i=$((i+1))
 if [[ -d /dev/serial/by-id ]]; then
   echo "$i. Correcting group ownership for /dev/serial/* ..."
-  find /dev/serial/by-id/ -exec chown --recursive --quiet --no-dereference .dialout {} \; 2>/dev/null
-  find /dev/serial/by-id/ -exec chmod --recursive --quiet g+rw {} \; 2>/dev/null
-  (( i++ ))
+  find /dev/serial/by-id/ -exec chown --recursive --no-dereference .dialout {} \; 2>/dev/null
+  find /dev/serial/by-id/ -exec chmod --recursive g+rw {} \; 2>/dev/null
+  i=$((i+1))
 fi
 if [[ "$(find /dev/ -name "gpio*")" -ne "" || -d /sys/devices/virtual/gpio || -d /sys/devices/platform/gpio-sunxi/gpio || /sys/class/gpio ]]; then
   echo "$i. Found GPIO: Correcting group permissions in /dev and /sys to 'gpio' with GID ${GPIO_GID} ..."
   if [ -n "$(grep ^gpio: /etc/group)" ]; then
     sed -i "s/^gpio\:.*/gpio\:x\:${GPIO_GID}/" /etc/group
   else
-    groupadd --force --gid ${GPIO_GID} --non-unique gpio 2>&1>/dev/null
+    addgroup -g ${GPIO_GID} gpio >/dev/null
   fi
-  adduser --quiet fhem gpio 2>&1>/dev/null
-  find /dev/ -name "gpio*" -exec chown --recursive --quiet --no-dereference .gpio {} \; 2>/dev/null
-  find /dev/ -name "gpio*" -exec chmod --recursive --quiet g+rw {} \; 2>/dev/null
-  [ -d /sys/devices/virtual/gpio ] && chown --recursive --quiet --no-dereference .gpio /sys/devices/virtual/gpio/* 2>&1>/dev/null && chmod --recursive --quiet g+w /sys/devices/virtual/gpio/*
-  [ -d /sys/devices/platform/gpio-sunxi/gpio ] && chown --recursive --quiet --no-dereference .gpio /sys/devices/platform/gpio-sunxi/gpio/* 2>&1>/dev/null && chmod --recursive --quiet g+w /sys/devices/platform/gpio-sunxi/gpio/*
-  [ -d /sys/class/gpio ] && chown --recursive --quiet --no-dereference .gpio /sys/class/gpio/* 2>&1>/dev/null && chmod --recursive --quiet g+w /sys/class/gpio/*
-  (( i++ ))
+  adduser fhem gpio >/dev/null
+  find /dev/ -name "gpio*" -exec chown --recursive --no-dereference .gpio {} \; 2>/dev/null
+  find /dev/ -name "gpio*" -exec chmod --recursive g+rw {} \; 2>/dev/null
+  [ -d /sys/devices/virtual/gpio ] && chown --recursive --no-dereference .gpio /sys/devices/virtual/gpio/* >/dev/null && chmod --recursive g+w /sys/devices/virtual/gpio/*
+  [ -d /sys/devices/platform/gpio-sunxi/gpio ] && chown --recursive --no-dereference .gpio /sys/devices/platform/gpio-sunxi/gpio/* >/dev/null && chmod --recursive g+w /sys/devices/platform/gpio-sunxi/gpio/*
+  [ -d /sys/class/gpio ] && chown --recursive --no-dereference .gpio /sys/class/gpio/* >/dev/null && chmod --recursive g+w /sys/class/gpio/*
+  i=$((i+1))
 fi
 if [ -n "$(grep ^i2c: /etc/group)" ]; then
   echo "$i. Found I2C: Correcting group permissions in /dev to 'i2c' with GID ${I2C_GID} ..."
   if [ -n "$(grep ^i2c: /etc/group)" ]; then
     sed -i "s/^i2c\:.*/i2c\:x\:${I2C_GID}/" /etc/group
   else
-    groupadd --force --gid ${I2C_GID} --non-unique i2c 2>&1>/dev/null
+    addgroup -g ${I2C_GID} i2c >/dev/null
   fi
-  adduser --quiet fhem i2c 2>&1>/dev/null
-  find /dev/ -name "i2c-*" -exec chown --recursive --quiet --no-dereference .i2c {} \;
-  (( i++ ))
+  adduser fhem i2c >/dev/null
+  find /dev/ -name "i2c-*" -exec chown --recursive --no-dereference .i2c {} \;
+  i=$((i+1))
 fi
 
 echo "$i. Updating /etc/sudoers.d/fhem-docker ..."
 echo "# Auto-generated during container start" > /etc/sudoers.d/fhem-docker
 
+echo "Set disable_coredump false" >> /etc/sudo.conf
+
 # required by modules
 echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/nmap" >> /etc/sudoers.d/fhem-docker
 
 # Allow updates
-echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -q update" >> /etc/sudoers.d/fhem-docker
-echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -s -q -V upgrade" >> /etc/sudoers.d/fhem-docker
-echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -y -q -V upgrade" >> /etc/sudoers.d/fhem-docker
-echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -y -q -V dist-upgrade" >> /etc/sudoers.d/fhem-docker
+echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/perl - App\:\:cpanminus" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/npm update *" >> /etc/sudoers.d/fhem-docker
 
+
 # Allow installation of new packages
-echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/local/bin/cpanm *" >> /etc/sudoers.d/fhem-docker
-echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -y install *" >> /etc/sudoers.d/fhem-docker
+echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/cpanm *" >> /etc/sudoers.d/fhem-docker
+echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/apk add *" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/npm install *" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/npm uninstall *" >> /etc/sudoers.d/fhem-docker
 
 chmod 440 /etc/sudoers.d/fhem*
-chown --quiet --no-dereference root:${FHEM_GID} /etc/sudoers.d/fhem* 2>&1>/dev/null
-(( i++ ))
+chown --no-dereference root:${FHEM_GID} /etc/sudoers.d/fhem* >/dev/null
+i=$((i+1))
 
 # SSH key: Ed25519
 mkdir -p ${FHEM_DIR}/.ssh
@@ -384,7 +257,7 @@ if [ ! -s ${FHEM_DIR}/.ssh/id_ed25519 ]; then
   rm -f ${FHEM_DIR}/.ssh/id_ed25519*
   ssh-keygen -t ed25519 -f ${FHEM_DIR}/.ssh/id_ed25519 -q -N "" -o -a 100
   sed -i "s/root@.*/fhem@fhem-docker/" ${FHEM_DIR}/.ssh/id_ed25519.pub
-  (( i++ ))
+  i=$((i+1))
 fi
 
 # SSH key: RSA
@@ -393,7 +266,7 @@ if [ ! -s ${FHEM_DIR}/.ssh/id_rsa ]; then
   rm -f ${FHEM_DIR}/.ssh/id_rsa*
   ssh-keygen -t rsa -b 4096 -f ${FHEM_DIR}/.ssh/id_rsa -q -N "" -o -a 100
   sed -i "s/root@.*/fhem@fhem-docker/" ${FHEM_DIR}/.ssh/id_rsa.pub
-  (( i++ ))
+  i=$((i+1))
 fi
 
 # SSH client hardening
@@ -407,7 +280,7 @@ HostKeyAlgorithms ssh-ed25519,ssh-rsa
 KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256
 MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-256,hmac-sha2-512,umac-128-etm@openssh.com
 " > ${FHEM_DIR}/.ssh/config
-  (( i++ ))
+  i=$((i+1))
 fi
 
 # Adding local hosts file
@@ -416,7 +289,7 @@ if [ -z "$(dig +short -t a gateway.docker.internal.)" ]; then
   if [ -n "${DOCKER_GW}" ]; then
     grep -q -E "gateway\.docker\.internal" /etc/hosts || echo -e "${DOCKER_GW}\tgateway.docker.internal" >> /etc/hosts
   fi
-  (( i++ ))
+  i=$((i+1))
 fi
 if [ -z "$(dig +short -t a host.docker.internal.)" ]; then
   echo "$i. Adding host.docker.internal to /etc/hosts ..."
@@ -425,7 +298,7 @@ if [ -z "$(dig +short -t a host.docker.internal.)" ]; then
   else
     grep -q -E "host\.docker\.internal" /etc/hosts || echo -e "127.0.127.2\thost.docker.internal" >> /etc/hosts
   fi
-  (( i++ ))
+  i=$((i+1))
 fi
 
 # Key pinning for Docker host
@@ -435,7 +308,7 @@ grep -v -E "^host.docker.internal" ${FHEM_DIR}/.ssh/known_hosts | grep -v -E "^g
 ssh-keyscan -t ed25519 host.docker.internal 2>/dev/null >> ${FHEM_DIR}/.ssh/known_hosts.tmp
 ssh-keyscan -t rsa host.docker.internal 2>/dev/null >> ${FHEM_DIR}/.ssh/known_hosts.tmp
 mv -f ${FHEM_DIR}/.ssh/known_hosts.tmp ${FHEM_DIR}/.ssh/known_hosts
-(( i++ ))
+i=$((i+1))
 
 # SSH key pinning
 echo "$i. Updating SSH key pinning and SSH client permissions for user 'fhem' ..."
@@ -445,7 +318,7 @@ chown -R fhem.fhem ${FHEM_DIR}/.ssh/
 chmod 640 ${FHEM_DIR}/.ssh/known_hosts
 chmod 600 ${FHEM_DIR}/.ssh/id_ed25519 ${FHEM_DIR}/.ssh/id_rsa
 chmod 640 ${FHEM_DIR}/.ssh/id_ed25519.pub ${FHEM_DIR}/.ssh/id_rsa.pub
-(( i++ ))
+i=$((i+1))
 
 # Function to print FHEM log in incremental steps to the docker log.
 [ -s "$( date +"${LOGFILE}" )" ] && OLDLINES=$( wc -l < "$( date +"${LOGFILE}" )" ) || OLDLINES=0
@@ -497,7 +370,7 @@ function StartFHEM {
     echo "$i. Running /docker/pre-start.sh script"
     chmod 755 /docker/pre-start.sh
     DEBIAN_FRONTEND=noninteractive LC_ALL=C /docker/pre-start.sh
-    (( i++ ))
+    i=$((i+1))
   fi
 
   # Update system environment
@@ -556,7 +429,7 @@ function StartFHEM {
   # Set default language settings, based on https://wiki.debian.org/Locale
   # Also see https://unix.stackexchange.com/questions/62316/why-is-there-no-euro-english-locale
   export LANG="${LANG:-en_US.UTF-8}" # maximum compatibility so we need US English
-  export LANGUAGE="${LANGUAGE:-en_US:en}"
+  export LANGUAGE="${LANGUAGE:-de_DE:en}"
   export LC_MEASUREMENT="${LC_MEASUREMENT:-de_DE.UTF-8}" # Measuring units in European standard
   export LC_MESSAGES="${LC_MESSAGES:-en_DK.UTF-8}" # Yes/No messages in english but with more answers
   export LC_MONETARY="${LC_MONETARY:-de_DE.UTF-8}" # Monetary formatting in European standard
@@ -570,13 +443,6 @@ function StartFHEM {
   [ "${LC_NAME}" != '' ] && export LC_NAME
   [ "${LC_ADDRESS}" != '' ] && export LC_ADDRESS
   [ "${LC_ALL}" != '' ] && export LC_ALL
-
-  # Export some variables someone might want to use
-  while IFS='=' read -r -d '' n v; do
-      [[ $n = 'NODE'* ]] && export "$n"
-      [[ $n = 'PERL'* ]] && export "$n"
-      [[ $n = 'PYTHON'* ]] && export "$n"
-  done < <(env -0)
 
   umask ${UMASK}
   echo -n -e "\nStarting FHEM ...\n"
@@ -618,18 +484,18 @@ StartFHEM
 while true; do
 
   # FHEM isn't running
-	if [ ! -s "$PIDFILE" ] || ! kill -0 "$(<"$PIDFILE")" 2>&1 >/dev/null; then
+	if [ ! -s "$PIDFILE" ] || ! kill -0 "$(<"$PIDFILE")"  >/dev/null; then
 		PrintNewLines
 		COUNTDOWN="$TIMEOUT"
 		echo -ne "\n\nAbrupt daemon termination, starting $COUNTDOWN""s countdown ..."
-		while ( [ ! -s "$PIDFILE" ] || ! kill -0 "$(<"$PIDFILE")" 2>&1 >/dev/null ) && (( COUNTDOWN > 0 )); do
+		while ( [ ! -s "$PIDFILE" ] || ! kill -0 "$(<"$PIDFILE")"  >/dev/null ) && (( COUNTDOWN > 0 )); do
 			echo -n " $COUNTDOWN"
 			(( COUNTDOWN-- ))
 			sleep 1
 		done
 
     # FHEM didn't reappear
-    if [ ! -s "$PIDFILE" ] || ! kill -0 "$(<"$PIDFILE")" 2>&1 >/dev/null; then
+    if [ ! -s "$PIDFILE" ] || ! kill -0 "$(<"$PIDFILE")"  >/dev/null; then
 
       # Container should be stopped
       if [ "$RESTART" == "0" ]; then
@@ -642,7 +508,7 @@ while true; do
 
         # Cleanup
         if [ -s "$PIDFILE" ]; then
-           kill -9 "$(<"$PIDFILE")" 2>&1>/dev/null
+           kill -9 "$(<"$PIDFILE")" >/dev/null
            rm -f "$PIDFILE"
         fi
 
