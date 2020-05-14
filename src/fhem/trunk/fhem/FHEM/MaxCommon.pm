@@ -1,5 +1,5 @@
 ##############################################
-# $Id: MaxCommon.pm 21049 2020-01-25 18:35:29Z Wzut $
+# $Id: MaxCommon.pm 21381 2020-03-08 17:22:28Z Wzut $
 # 
 #  (c) 2012 Copyright: Matthias Gehre, M.Gehre@gmx.de
 #  (c) 2019 Copyright: Wzut
@@ -33,7 +33,9 @@ require Exporter;
   2 => "HeatingThermostatPlus",
   3 => "WallMountedThermostat",
   4 => "ShutterContact",
-  5 => "PushButton"
+  5 => "PushButton",
+  6 => "virtualShutterContact",
+  7 => "virtualThermostat"
 );
 
 %msgId2Cmd = (

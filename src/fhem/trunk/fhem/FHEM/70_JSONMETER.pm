@@ -208,7 +208,7 @@ JSONMETER_Define($$)
   #Reset temporary values
   $hash->{fhem}{jsonInterpreter} = "";
 
-  $hash->{fhem}{modulVersion} = '$Date: 2019-12-24 00:07:57 +0100 (Tue, 24 Dec 2019) $';
+  $hash->{fhem}{modulVersion} = '$Date: 2019-12-24 00:07:57 +0100 (Di, 24 Dez 2019) $';
  
  return undef;
 } #end JSONMETER_Define

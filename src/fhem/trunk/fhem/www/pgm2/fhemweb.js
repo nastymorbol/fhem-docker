@@ -1,6 +1,6 @@
 "use strict";
 var FW_version={};
-FW_version["fhemweb.js"] = "$Id: fhemweb.js 20554 2019-11-20 20:53:04Z rudolfkoenig $";
+FW_version["fhemweb.js"] = "$Id: fhemweb.js 21316 2020-02-29 20:24:41Z rudolfkoenig $";
 
 var FW_serverGenerated;
 var FW_serverFirstMsg = (new Date()).getTime()/1000;
@@ -579,6 +579,7 @@ FW_errmsg(txt, timeout)
 function
 FW_okDialog(txt, parent, removeFn)
 {
+  $("#FW_okDialog").remove();
   var div = $("<div id='FW_okDialog'>");
   $(div).html(txt);
   $("body").append(div);
@@ -1513,7 +1514,7 @@ FW_createSelectNumbers(elName, devName, vArr, currVal, set, params, cmd)
     for(var j=min; j <= max; j+=stp) {
       var o = document.createElement('option');
       o.text = o.value = j.toFixed(dp);
-      vHash[j.toString()] = 1;
+      vHash[o.text] = 1;
       newEl.options[k] = o;
       k++;
     }
@@ -1540,7 +1541,11 @@ FW_createSelectNumbers(elName, devName, vArr, currVal, set, params, cmd)
     $(newEl).attr('name', elName);
   if(cmd)
     $(newEl).change(function(arg) { cmd($(newEl).val()) });
-  newEl.setValueFn = function(arg) { if(vHash[arg]) $(newEl).val(arg); };
+  newEl.setValueFn = function(arg) { 
+    arg = parseFloat(arg).toFixed(dp);
+    if(vHash[arg]) 
+      $(newEl).val(arg);
+  };
   return newEl;
 }
 

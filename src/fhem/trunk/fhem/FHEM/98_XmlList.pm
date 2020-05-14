@@ -1,9 +1,8 @@
 ##############################################
-# $Id: 98_XmlList.pm 13128 2017-01-17 21:40:09Z rudolfkoenig $
+# $Id: 98_XmlList.pm 21509 2020-03-25 11:20:51Z rudolfkoenig $
 package main;
 use strict;
 use warnings;
-use POSIX;
 
 sub CommandXmlList($$);
 sub XmlEscape($);

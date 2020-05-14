@@ -27,7 +27,7 @@
 #
 #  Homepage:  http://fhem.de
 #
-# $Id: fhem.pl 21056 2020-01-26 13:01:53Z rudolfkoenig $
+# $Id: fhem.pl 21573 2020-04-01 16:26:14Z rudolfkoenig $
 
 
 use strict;
@@ -136,8 +136,9 @@ sub getAllGets($;$);
 sub getAllSets($;$);
 sub getPawList($);
 sub getUniqueId();
+sub hashKeyRename($$$);
 sub json2nameValue($;$$);
-sub json2reading($$;$$);
+sub json2reading($$;$$$);
 sub latin1ToUtf8($);
 sub myrename($$$);
 sub notifyRegexpChanged($$);
@@ -191,13 +192,13 @@ sub CommandTrigger($$);
 
 # configDB special
 sub cfgDB_Init;
-sub cfgDB_ReadAll($);
+sub cfgDB_ReadAll;
 sub cfgDB_SaveState;
 sub cfgDB_SaveCfg;
-sub cfgDB_AttrRead($);
-sub cfgDB_ReadFile($);
-sub cfgDB_UpdateFile($);
-sub cfgDB_WriteFile($@);
+sub cfgDB_AttrRead;
+sub cfgDB_FileRead;
+sub cfgDB_FileUpdate;
+sub cfgDB_FileWrite;
 
 ##################################################
 # Variables:
@@ -280,7 +281,7 @@ use constant {
 };
 
 $selectTimestamp = gettimeofday();
-$cvsid = '$Id: fhem.pl 21056 2020-01-26 13:01:53Z rudolfkoenig $';
+$cvsid = '$Id: fhem.pl 21573 2020-04-01 16:26:14Z rudolfkoenig $';
 
 my $AttrList = "alias comment:textField-long eventMap:textField-long ".
                "group room suppressReading userReadings:textField-long ".
@@ -303,6 +304,7 @@ my @cmdList;                    # Remaining commands in a chain. Used by sleep
 my %sleepers;                   # list of sleepers
 my %delayedShutdowns;           # definitions needing delayed shutdown
 my %fuuidHash;                  # for duplicate checking
+my $globalUniqueID;             # cache it
 
 $init_done = 0;
 $lastDefChange = 0;
@@ -1760,6 +1762,16 @@ CancelDelayedShutdown($)
 }
 
 sub
+DoDelayedShutdown($)
+{
+  my ($hash) = @_;
+  return CommandShutdown($hash->{cl},$hash->{param},undef,1,$hash->{exitValue})
+     if(!keys %delayedShutdowns || 
+        $hash->{waitingFor}++ >= $hash->{maxShutdownDelay});
+  InternalTimer(gettimeofday()+1, "DoDelayedShutdown", $hash, 0);
+}
+
+sub
 DelayedShutdown($$$)
 {
   my ($cl, $param, $exitValue) = @_;
@@ -1769,22 +1781,15 @@ DelayedShutdown($$$)
     $delayedShutdowns{$d} = 1 if(CallFn($d, "DelayedShutdownFn", $defs{$d}));
   }
   return 0 if(!keys %delayedShutdowns);
-  
-  my $waitingFor = 0;
-  my $maxShutdownDelay = AttrVal("global", "maxShutdownDelay", 10);
-  my $checkList;
 
+  my $maxShutdownDelay = AttrVal("global", "maxShutdownDelay", 10);
   Log 1, "Server shutdown delayed due to ".join(",", keys %delayedShutdowns).
                 " for max $maxShutdownDelay sec";
   DoTrigger("global", "DELAYEDSHUTDOWN", 1);
 
-  $checkList = sub()
-  {
-     return CommandShutdown($cl, $param, undef, 1, $exitValue)
-             if(!keys %delayedShutdowns || $waitingFor++ >= $maxShutdownDelay);
-     InternalTimer(gettimeofday()+1, $checkList, undef, 0);
-  };
-  $checkList->();
+  DoDelayedShutdown(
+        { cl=>$cl, param=>$param, exitValue=>$exitValue, 
+          waitingFor=>0, maxShutdownDelay=>$maxShutdownDelay } );
   return 1;
 }
 
@@ -2413,7 +2418,7 @@ CommandSetReading($$)
       delete $hash->{CL};
     }
     my $b1 = $b[1];
-    return "bad reading name $b1 (contains not A-Za-z/\\d_\\.- or is too long)"
+    return "$sdev: bad reading name '$b1' (allowed chars: A-Za-z/\\d_\\.-)"
       if(!goodReadingName($b1));
     readingsSingleUpdate($defs{$sdev}, $b1, $b[2], 1);
   }
@@ -2871,9 +2876,9 @@ CommandAttr($$)
   @a = split(" ", $param, 3) if($param);
 
   return "Usage: attr [-a|-r] <name> <attrname> [<attrvalue>]\n$namedef"
-           if(@a && @a < 2);
+           if(@a < 2 || ($append && $remove));
   my $a1 = $a[1];
-  return "bad attribute name $a1 (contains not A-Za-z/\\d_\\.- or is too long)"
+  return "$a[0]: bad attribute name '$a1' (allowed chars: A-Za-z/\\d_\\.-)"
            if($featurelevel > 5.9 && !goodReadingName($a1) && $a1 ne "?");
 
   my @rets;
@@ -3091,7 +3096,7 @@ CommandSetstate($$)
       }
 
       Log3 $d, 3,
-         "bad reading name $sname (contains not A-Za-z/\\d_\\.- or is too long)"
+         "$sdev: bad reading name '$sname' (allowed chars: A-Za-z/\\d_\\.-)"
         if(!goodReadingName($sname));
 
       if(!defined($d->{READINGS}{$sname}) ||
@@ -3484,6 +3489,12 @@ FmtDateTimeRFC1123($)
 }
 
 
+sub
+Logdir()
+{
+  return AttrVal("global","logdir", AttrVal("global","modpath","")."/log");
+}
+
 #####################################
 sub
 ResolveDateWildcards($@)
@@ -3493,7 +3504,8 @@ ResolveDateWildcards($@)
   my ($f, @t) = @_;
   return $f if(!$f);
   return $f if($f !~ m/%/);     # Be fast if there is no wildcard
-  $f =~ s/%L/$attr{global}{logdir}/g if($attr{global}{logdir}); #log directory
+  my $logdir = Logdir();
+  $f =~ s/%L/$logdir/g;
   return strftime($f,@t);
 }
 
@@ -4609,7 +4621,7 @@ readingsBeginUpdate($)
   $hash->{".updateTime"} = $now; # in seconds since the epoch
   $hash->{".updateTimestamp"} = $fmtDateTime;
 
-  $hash->{CHANGED}= () if(!defined($hash->{CHANGED}));
+  $hash->{CHANGED}= [] if(!defined($hash->{CHANGED}));
   return $fmtDateTime;
 }
 
@@ -5160,12 +5172,13 @@ json2nameValue($;$$)
     $ret->{$name} = $val;
   };
 
-  sub eObj($$$$$$);
+  sub eObj($$$$$$;$);
   sub
-  eObj($$$$$$)
+  eObj($$$$$$;$)
   {
-    my ($ret,$map,$name,$val,$in,$prefix) = @_;
+    my ($ret,$map,$name,$val,$in,$prefix,$firstLevel) = @_;
     my $err; 
+    $prefix="" if(!$firstLevel);
 
     if($val =~ m/^"/) {
       ($err, $val, $in) = lStr($val);
@@ -5176,9 +5189,18 @@ json2nameValue($;$$)
     } elsif($val =~ m/^{/) { # }
       ($err, $val, $in) = lObj($val, '{', '}');
       return ($err,undef) if($err);
-      my $r2 = json2nameValue($val);
-      foreach my $k (keys %{$r2}) {
-        setVal($ret, $map, $prefix, "${name}_$k", $r2->{$k});
+
+      my %r2;
+      my $in2 = $val;
+      while($in2 =~ m/^\s*"([^"]+)"\s*:\s*(.*)$/s) {
+        my ($name,$val) = ($1,$2);
+        $name =~ s/[^a-z0-9._\-\/]/_/gsi;
+        ($err,$in2) = eObj(\%r2, $map, $name, $val, $in2, $prefix);
+        return ($err,undef) if($err);
+        $in2 =~ s/^\s*,\s*//;
+      }
+      foreach my $k (keys %r2) {
+        setVal($ret, $map, $prefix, $firstLevel ? $k : "${name}_$k", $r2{$k});
       }
 
     } elsif($val =~ m/^\[/) { 
@@ -5187,7 +5209,9 @@ json2nameValue($;$$)
       my $idx = 1;
       $val =~ s/^\s*//;
       while($val) {
-        ($err,$val) = eObj($ret, $map, $name."_$idx", $val, $val, $prefix);
+        ($err,$val) = eObj($ret, $map, 
+                                $firstLevel ? "$prefix$idx" : $name."_$idx",
+                                $val, $val, $prefix);
         return ($err,undef) if($err);
         $val =~ s/^\s*,\s*//;
         $val =~ s/\s*$//;
@@ -5213,38 +5237,59 @@ json2nameValue($;$$)
     return (undef, $in);
   }
 
-  $in = $1 if($in =~ m/^\s*{(.*)}\s*$/s);
-
+  $in =~ s/^\s+//;
+  $in =~ s/\s+$//;
   my $err;
-  while($in =~ m/^\s*"([^"]+)"\s*:\s*(.*)$/s) {
-    my ($name,$val) = ($1,$2);
-    $name =~ s/[^a-z0-9._\-\/]/_/gsi;
-    ($err,$in) = eObj(\%ret, $map, $name, $val, $in, $prefix);
-    if($err) {
-      Log 4, $err;
-      %ret = ();
-      return \%ret;
-    }
-    $in =~ s/^\s*,\s*//;
+  ($err,$in) = eObj(\%ret, $map, "", $in, "", $prefix, 1);
+  if($err) {
+    Log 4, $err;
+    %ret = ();
+    return \%ret;
+  }
+
+  return \%ret;
+}
+
+# add certain values to the key. Used to postprocess json2nameValue, where
+# the input is of the form [{"name":"NAME","value":"Value"}], with
+# hashKeyRename(json2nameValue($in), "^([0-9]+)_name:(.*)","^([0-9]+)");
+sub
+hashKeyRename($$$)
+{
+  my ($hash, $r1, $r2) = @_;
+  my (%repl, %ret);
+  for my $k (keys %{$hash}) {
+    $repl{$1} = $2 if(defined($hash->{$k}) &&
+       "$k:$hash->{$k}" =~ m/$r1/ && defined($1) && defined($2));
+  }
+  for my $k (keys %{$hash}) {
+    my $val = $hash->{$k};
+    next if($k !~ m/$r2/ || !defined($repl{$1}));
+    $k =~ s/$r2/$repl{$1}/;
+    $ret{$k} = $val;
   }
   return \%ret;
 }
 
 # generate readings from the json string (parsed by json2reading) for $hash
 sub
-json2reading($$;$$)
+json2reading($$;$$$)
 {
-  my ($hash, $json, $prefix, $map) = @_;
+  my ($hash, $json, $prefix, $map, $postProcess) = @_;
 
   $hash = $defs{$hash} if(ref($hash) ne "HASH");
   return "json2reading: first arg is not a FHEM device"
         if(!$hash || ref $hash ne "HASH" || !$hash->{TYPE});
 
   my $ret = json2nameValue($json, $prefix, $map);
+  if($postProcess) {
+    $ret = eval($postProcess);
+    Log 1, $@ if($@);
+  }
   if($ret && ref $ret eq "HASH") {
     readingsBeginUpdate($hash);
     foreach my $k (keys %{$ret}) {
-      readingsBulkUpdate($hash, $k, $ret->{$k});
+      readingsBulkUpdate($hash, makeReadingName($k), $ret->{$k});
     }
     readingsEndUpdate($hash, 1);
   }
@@ -5435,13 +5480,18 @@ FileDelete($)
 sub
 getUniqueId()
 {
+  return $globalUniqueID if($globalUniqueID);
   my ($err, $uniqueID) = getKeyValue("uniqueID");
   if(defined($uniqueID)) {
     $uniqueID =~ s/[^0-9a-f]//g;
-    return $uniqueID if($uniqueID && length($uniqueID) == 32);
+    if($uniqueID && length($uniqueID) == 32) {
+      $globalUniqueID = $uniqueID;
+      return $uniqueID;
+    }
   }
   $uniqueID = createUniqueId();
   setKeyValue("uniqueID", $uniqueID);
+  $globalUniqueID = $uniqueID;
   return $uniqueID;
 }
 
@@ -5914,7 +5964,7 @@ restoreDir_saveFile($$)
   my $root = $attr{global}{modpath};
   restoreDir_mkDir($root, "$restoreDir/$fName", 1);
   if(!copy($fName, "$root/$restoreDir/$fName")) {
-    log 1, "copy $fName $root/$restoreDir/$fName failed:$!";
+    Log 1, "copy $fName $root/$restoreDir/$fName failed:$!";
   }
 }
 

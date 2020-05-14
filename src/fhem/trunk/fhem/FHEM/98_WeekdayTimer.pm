@@ -1,10 +1,10 @@
-# $Id: 98_WeekdayTimer.pm 20769 2019-12-17 06:12:03Z Beta-User $
+# $Id: 98_WeekdayTimer.pm 21512 2020-03-25 14:04:04Z Beta-User $
 ##############################################################################
 #
 #     98_WeekdayTimer.pm
 #     written by Dietmar Ortmann
 #     modified by Tobias Faust
-#     Maintained by igami since 02-2018
+#     Maintained by Beta-User since 11-2019
 #     Thanks Dietmar for all you did for FHEM, RIP
 #
 #     This file is part of fhem.
@@ -27,7 +27,6 @@
 package main;
 use strict;
 use warnings;
-use POSIX;
 
 use Time::Local 'timelocal_nocheck';
 
@@ -71,6 +70,10 @@ sub WeekdayTimer_Define($$) {
   $hash->{NAME}            = $name;
   $hash->{DEVICE}          = $device;
   my $language = WeekdayTimer_Language  ($hash, \@a);
+
+  if ($def =~ /weekprofile/gm) { 
+    addToDevAttrList($name, "weekprofile");
+  }
   
   InternalTimer(time(), "WeekdayTimer_Start",$hash,0);
   
@@ -178,6 +181,7 @@ sub WeekdayTimer_Set($@) {
   } elsif ($v =~ /weekprofile ([^: ]+):([^:]+):([^: ]+)\b/) {
     Log3 $hash, 3, "[$name] set $name $v";
     return unless WeekdayTimer_UpdateWeekprofileReading($hash, $1, $2, $3);	
+    WeekdayTimer_DeleteTimer($hash);
     WeekdayTimer_Start($hash);
   }
   return undef;
@@ -204,7 +208,7 @@ sub WeekdayTimer_GetHashIndirekt ($$) {
   my ($myHash, $function) = @_;
 
   if (!defined($myHash->{HASH})) {
-    Log 3, "[$function] myHash not valid";
+    Log3 $myHash, 3, "[$function] myHash not valid";
     return undef;
   };
   return $myHash->{HASH};
@@ -978,6 +982,11 @@ sub WeekdayTimer_FensterOffen ($$$) {
 
   my $nextRetry = time()+55+int(rand(10));
   my $epoch = $hash->{profil}{$time}{EPOCH};
+  unless ($epoch) {                             #prevent FHEM crashing when profile is somehow damaged or incomlete, forum #109164
+    my $actual_wp_reading = ReadingsVal($name,"weekprofiles","none");
+    Log3 $hash, 0, "[$name] profile $actual_wp_reading, item $time seems to be somehow damaged or incomlete!";
+    $epoch = int(time()) - 10*MINUTESECONDS;
+  }
   my $delay = int(time()) - $epoch;
   my $nextDelay = int($delay/60.+1.5)*60;  # round to multiple of 60sec
   $nextRetry = $epoch + $nextDelay;
@@ -1439,7 +1448,8 @@ sub WeekdayTimer_GetWeekprofileReadingTriplett($$) {
       <code>set myWeekprofiles send_to_device holiday:livingrooms wd</code><br>
       </li><br>
       <li>Although it's possible to use more than one weekprofile device in a WeekdayTimer, this is explicitly not recommended despite you are exactly knwowing what you are doing.</li><br>
-    </ul>	
+      <li>Note: The userattr <i>weekprofile</i> will automatically be added to the list and can't be removed. The attribute itself is intended to be set to the corresponding profile name in your weekprofile device allowing easy change using the topic feature.</li><br>
+      </ul>	
     </ul>
   </ul>
   <a name="WeekdayTimerget"></a>
@@ -1507,7 +1517,6 @@ sub WeekdayTimer_GetWeekprofileReadingTriplett($$) {
       "runtime" : {
          "requires" : {
             "Data::Dumper" : "0",
-            "POSIX" : "0",
             "Time::Local" : "0",
             "strict" : "0",
             "warnings" : "0"

@@ -1,11 +1,10 @@
 ################################################################
-# $Id: 98_JsonList2.pm 20561 2019-11-22 19:59:14Z rudolfkoenig $
+# $Id: 98_JsonList2.pm 21509 2020-03-25 11:20:51Z rudolfkoenig $
 ################################################################
 
 package main;
 use strict;
 use warnings;
-use POSIX;
 
 sub CommandJsonList2($$);
 

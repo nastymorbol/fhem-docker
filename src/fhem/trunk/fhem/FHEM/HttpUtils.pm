@@ -1,5 +1,5 @@
 ##############################################
-# $Id: HttpUtils.pm 20800 2019-12-22 09:13:49Z moises $
+# $Id: HttpUtils.pm 21529 2020-03-28 07:15:44Z rudolfkoenig $
 package main;
 
 use strict;
@@ -862,8 +862,8 @@ HttpUtils_ParseAnswer($)
       return ("$hash->{displayurl}: Too many redirects", "");
 
     } else {
-      my $ra;
-      map { $ra=$1 if($_ =~ m/Location:\s*(\S+)$/) } @header;
+      my $ra="";
+      map { $ra=$1 if($_ =~ m/^Location:\s*(\S+)\s*$/i) } @header;
       $ra = "/$ra" if($ra !~ m/^http/ && $ra !~ m/^\//);
       $hash->{url} = ($ra =~ m/^http/) ? $ra: $hash->{addr}.$ra;
       Log3 $hash, $hash->{loglevel}, "HttpUtils $hash->{displayurl}: ".

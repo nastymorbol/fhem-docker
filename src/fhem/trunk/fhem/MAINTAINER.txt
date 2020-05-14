@@ -91,6 +91,7 @@ FHEM/11_OWX_TCP.pm           pahenning            1Wire
 FHEM/12_HMS.pm               rudolfkoenig         SlowRF
 FHEM/12_HProtocolGateway.pm  eisler               Sonstige Systeme
 FHEM/12_HProtocolTank.pm     eisler               Sonstige Systeme
+FHEM/12_OilFox.pm            eisler               Sonstige Systeme
 FHEM/13_KS300.pm             rudolfkoenig         SlowRF
 FHEM/14_CUL_MAX.pm           Wzut		  MAX
 FHEM/14_CUL_REDIRECT.pm      dancer0705/bjoernh   Sonstiges
@@ -298,6 +299,7 @@ FHEM/55_PIFACE.pm            klaus.schauer        Einplatinencomputer
 FHEM/56_POKEYS.pm            axelberner           Sonstiges
 FHEM/57_Calendar.pm          neubert              Unterstützende Dienste/Kalendermodule
 FHEM/57_CALVIEW.pm           chris1284            Unterstützende Dienste/Kalendermodule
+FHEM/57_SSCal.pm             DS_Starter           Unterstützende Dienste/Kalendermodule
 FHEM/59_HCS.pm               hjr                  Automatisierung (oder auch PM)
 FHEM/59_LuftdatenInfo        igami                Bastelecke
 FHEM/59_OPENWEATHER.pm       tupol                Unterstützende Dienste/Wettermodule (Link als PM an tupol)
@@ -320,11 +322,14 @@ FHEM/66_EseraDigitalInOut.pm pizmus               1Wire
 FHEM/66_EseraIButton.pm      pizmus               1Wire
 FHEM/66_EseraMulti.pm        pizmus               1Wire
 FHEM/66_EseraOneWire.pm      pizmus               1Wire
+FHEM/66_EseraShutter.pm      pizmus               1Wire
 FHEM/66_EseraTemp.pm         pizmus               1Wire
 FHEM/67_ECMDDevice.pm        neubert              Sonstige Systeme
 FHEM/70_BOTVAC.pm            vuffiraa             Sonstige Systeme
 FHEM/70_BRAVIA.pm            vuffiraa             Multimedia
 FHEM/70_CanOverEthernet.pm   delmar               Sonstige Systeme
+FHEM/70_DENON_AVR.pm         delmar               Multimedia
+FHEM/70_DENON_AVR_ZONE.pm    delmar               Multimedia
 FHEM/70_EGPM.pm              alexus               Sonstiges
 FHEM/70_ENIGMA2.pm           loredo               Multimedia
 FHEM/70_Jabber.pm            BioS                 Unterstützende Dienste
@@ -479,6 +484,7 @@ FHEM/98_DOIF.pm              damian-s             Automatisierung/DOIF
 FHEM/98_DOIFtools.pm         Ellert               Automatisierung/DOIF
 FHEM/98_Dooya.pm             Jarnsen/ralf9/darkmission        Sonstige Systeme
 FHEM/98_dummy.pm             rudolfkoenig         Automatisierung
+FHEM/98_DSBMobile 			 KernSani 			  https://forum.fhem.de/index.php/topic,107104.0.html
 FHEM/98_expandJSON.pm        dev0                 Unterstützende Dienste
 FHEM/98_feels_like.pm        hotbso               Wettermodule
 FHEM/98_fhemdebug.pm         rudolfkoenig         Sonstiges
@@ -510,7 +516,6 @@ FHEM/98_ModbusElsnerWS.pm    klaus.schauer        Sonstiges
 FHEM/98_ModbusSET.pm         StefanStrobel        Sonstiges
 FHEM/98_ModbusTrovis5576.pm  Reinerlein           Heizungssteuerung/Raumklima
 FHEM/98_monitoring.pm        igami                Automatisierung
-FHEM/98_MSwitch.pm           Byte09               Automatisierung
 FHEM/98_notice.pm            mfr69bs              Sonstiges
 FHEM/98_PHC.pm               StefanStrobel        Sonstiges
 FHEM/98_PID20.pm             John                 Automatisierung
@@ -524,7 +529,6 @@ FHEM/98_readingsWatcher	     Wzut		  Sonstiges
 FHEM/98_restore.pm           rudolfkoenig         Sonstiges
 FHEM/98_rssFeed.pm           Benni                Unterstützende Dienste
 FHEM/98_serviced.pm          DeeSPe               Unterstützende Dienste
-FHEM/98_Siro.pm              Byte09 / Dr. Smag    Sonstige Systeme
 FHEM/98_statistics.pm        tupol                Unterstützende Dienste (Link als PM an tupol)
 FHEM/98_structure.pm         rudolfkoenig         Automatisierung
 FHEM/98_SVG.pm               rudolfkoenig         Frontends/SVG/Plots/logProxy

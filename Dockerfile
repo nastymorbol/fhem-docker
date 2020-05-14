@@ -2,6 +2,8 @@ ARG BASE_IMAGE="debian"
 ARG BASE_IMAGE_TAG="buster"
 FROM ${BASE_IMAGE}:${BASE_IMAGE_TAG}
 
+# BUILD X
+# docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t nastymorbol/fhem:buster-slim --push .
 # Arguments to instantiate as variables
 ARG BASE_IMAGE
 ARG BASE_IMAGE_TAG
@@ -17,19 +19,19 @@ ARG IMAGE_VERSION=""
 
 # Custom build options:
 #  Disable certain image layers using build env variables if desired
-ARG IMAGE_LAYER_SYS_EXT
-ARG IMAGE_LAYER_PERL_EXT
-ARG IMAGE_LAYER_DEV
-ARG IMAGE_LAYER_PERL_CPAN
-ARG IMAGE_LAYER_PERL_CPAN_EXT
-ARG IMAGE_LAYER_PYTHON
-ARG IMAGE_LAYER_PYTHON_EXT
-ARG IMAGE_LAYER_NODEJS
-ARG IMAGE_LAYER_NODEJS_EXT
+ARG IMAGE_LAYER_SYS_EXT="0"
+ARG IMAGE_LAYER_PERL_EXT="0"
+ARG IMAGE_LAYER_DEV="0"
+ARG IMAGE_LAYER_PERL_CPAN="0"
+ARG IMAGE_LAYER_PERL_CPAN_EXT="1"
+ARG IMAGE_LAYER_PYTHON="0"
+ARG IMAGE_LAYER_PYTHON_EXT="0"
+ARG IMAGE_LAYER_NODEJS="0"
+ARG IMAGE_LAYER_NODEJS_EXT="0"
 
 # Custom installation packages
 ARG APT_PKGS
-ARG CPAN_PKGS
+ARG CPAN_PKG
 ARG PIP_PKGS
 ARG NPM_PKGS
 
@@ -76,11 +78,11 @@ LABEL org.fhem.authors=${L_AUTHORS_FHEM} \
    org.fhem.licenses=${L_LICENSES_FHEM} \
    org.fhem.description=${L_DESCR_FHEM}
 
-ENV LANG=en_US.UTF-8 \
-   LANGUAGE=en_US:en \
+ENV LANG=de_DE.UTF-8 \
+   LANGUAGE=de_DE:de \
    LC_ADDRESS=de_DE.UTF-8 \
    LC_MEASUREMENT=de_DE.UTF-8 \
-   LC_MESSAGES=en_DK.UTF-8 \
+   LC_MESSAGES=de_DE.UTF-8 \
    LC_MONETARY=de_DE.UTF-8 \
    LC_NAME=de_DE.UTF-8 \
    LC_NUMERIC=de_DE.UTF-8 \
@@ -121,11 +123,16 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
         ca-certificates \
         gnupg \
         locales \
+        procps \
+        libcap-ng-utils \
+        iproute2 \ 
+        dnsutils \
+        openssh-client \
     && LC_ALL=C c_rehash \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qqy --no-install-recommends upgrade \
     \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales \
-    && echo 'de_DE@euro ISO-8859-15\nde_DE ISO-8859-1\nde_DE.UTF-8 UTF-8\nen_DK ISO-8859-1\nen_DK.ISO-8859-15 ISO-8859-15\nen_DK.UTF-8 UTF-8\nen_GB ISO-8859-1\nen_GB.ISO-8859-15 ISO-8859-15\nen_GB.UTF-8 UTF-8\nen_IE ISO-8859-1\nen_IE.ISO-8859-15 ISO-8859-15\nen_IE.UTF-8 UTF-8\nen_US ISO-8859-1\nen_US.ISO-8859-15 ISO-8859-15\nen_US.UTF-8 UTF-8\nes_ES@euro ISO-8859-15\nes_ES ISO-8859-1\nes_ES.UTF-8 UTF-8\nfr_FR@euro ISO-8859-15\nfr_FR ISO-8859-1\nfr_FR.UTF-8 UTF-8\nit_IT@euro ISO-8859-15\nit_IT ISO-8859-1\nit_IT.UTF-8 UTF-8\nnl_NL@euro ISO-8859-15\nnl_NL ISO-8859-1\nnl_NL.UTF-8 UTF-8\npl_PL ISO-8859-2\npl_PL.UTF-8 UTF-8' >/etc/locale.gen \
+    && echo 'de_DE@euro ISO-8859-15\nde_DE ISO-8859-1\nde_DE.UTF-8 UTF-8\nen_US ISO-8859-1\nen_US.ISO-8859-15 ISO-8859-15\nen_US.UTF-8 UTF-8' >/etc/locale.gen \
     && LC_ALL=C locale-gen \
     \
     && ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
@@ -136,34 +143,20 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
     && sed -i "s,http://security.debian.org,https://cdn-aws.deb.debian.org,g" /etc/apt/sources.list \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends \
-        adb \
-        avahi-daemon \
-        avrdude \
-        bluez \
         curl \
-        dnsutils \
-        etherwake \
-        fonts-liberation \
-        git-core \
         i2c-tools \
-        inetutils-ping \
         jq \
-        libcap-ng-utils \
-        libcap2-bin \
-        lsb-release \
-        mariadb-client \
-        netcat \
-        net-tools \
-        openssh-client \
-        procps \
-        sendemail \
         sqlite3 \
-        subversion \
         sudo \
         telnet \
-        unzip \
-        usbutils \
         wget \
+        usbutils \
+        # Add cusom perl deps
+        libboolean-perl \
+        libmodule-pluggable-perl \
+        libppi-perl \
+        # ----
+        # ENV Moduls
         ${APT_PKGS} \
     && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* ~/.[^.] ~/.??* ~/*
@@ -343,7 +336,7 @@ RUN if [ "${IMAGE_LAYER_DEV}" != "0" ] || [ "${IMAGE_LAYER_PERL_CPAN}" != "0" ] 
 #  * exclude any ARM platforms due to long build time
 #  * manually pre-compiled ARM packages may be applied here
 RUN if [ "${CPAN_PKGS}" != "" ] || [ "${PIP_PKGS}" != "" ] || [ "${IMAGE_LAYER_PERL_CPAN}" != "0" ] || [ "${IMAGE_LAYER_PERL_CPAN_EXT}" != "0" ] || [ "${IMAGE_LAYER_PYTHON}" != "0" ] || [ "${IMAGE_LAYER_PYTHON_EXT}" != "0" ]; then \
-      curl --retry 3 --retry-connrefused --retry-delay 2 -fsSL https://git.io/cpanm | perl - App::cpanminus \
+      curl --retry 3 --retry-connrefused --retry-delay 2 -fsSL http://cpanmin.us | perl - App::cpanminus \
       && cpanm --notest \
           App::cpanoutdated \
           CPAN::Plugin::Sysdeps \
@@ -353,7 +346,7 @@ RUN if [ "${CPAN_PKGS}" != "" ] || [ "${PIP_PKGS}" != "" ] || [ "${IMAGE_LAYER_P
            ${CPAN_PKGS} \
          ; fi \
       && if [ "${IMAGE_LAYER_PERL_CPAN_EXT}" != "0" ]; then \
-           if [ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "i386" ]; then \
+#           if [ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "i386" ]; then \
              cpanm --notest \
               Alien::Base::ModuleBuild \
               Alien::Sodium \
@@ -364,7 +357,7 @@ RUN if [ "${CPAN_PKGS}" != "" ] || [ "${PIP_PKGS}" != "" ] || [ "${IMAGE_LAYER_P
               Net::MQTT::Constants \
               Net::MQTT::Simple \
               Net::WebSocket::Server \
-             ; fi \
+#             ; fi \
          ; fi \
       && rm -rf /root/.cpanm \
       && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \

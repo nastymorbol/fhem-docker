@@ -178,7 +178,7 @@ sub statistics_Define($$)
   $hash->{NOTIFYDEV} = "global,".$devName;
 
   $hash->{STATE} = "Waiting for notifications";
-  $hash->{fhem}{modulVersion} = '$Date: 2019-12-24 00:07:57 +0100 (Tue, 24 Dec 2019) $';
+  $hash->{fhem}{modulVersion} = '$Date: 2019-12-24 00:07:57 +0100 (Di, 24 Dez 2019) $';
 
   RemoveInternalTimer($hash);
   

@@ -1,10 +1,9 @@
 #######################################################################
-# $Id: 95_holiday.pm 20290 2019-10-02 20:46:32Z rudolfkoenig $
+# $Id: 95_holiday.pm 21509 2020-03-25 11:20:51Z rudolfkoenig $
 package main;
 
 use strict;
 use warnings;
-use POSIX;
 
 sub holiday_refresh($;$$);
 

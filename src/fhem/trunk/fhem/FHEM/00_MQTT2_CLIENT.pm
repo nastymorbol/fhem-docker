@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 00_MQTT2_CLIENT.pm 20184 2019-09-17 16:25:01Z rudolfkoenig $
+# $Id: 00_MQTT2_CLIENT.pm 21568 2020-03-31 21:47:06Z rudolfkoenig $
 package main;
 
 use strict;
@@ -54,7 +54,7 @@ MQTT2_CLIENT_Initialize($)
     username
   );
   use warnings 'qw';
-  $hash->{AttrList} = join(" ", @attrList);
+  $hash->{AttrList} = join(" ", @attrList)." ".$readingFnAttributes;
 }
 
 #####################################
@@ -248,6 +248,7 @@ MQTT2_CLIENT_Set($@)
     return "Usage: set $name publish -r topic [value]" if(@a < 1);
     my $tp = shift(@a);
     my $val = join(" ", @a);
+    readingsSingleUpdate($hash, "lastPublish", "$tp:$val", 1);
     MQTT2_CLIENT_doPublish($hash, $tp, $val, $retain);
 
   } elsif($a[0] eq "password") {
@@ -488,7 +489,6 @@ MQTT2_CLIENT_getStr($$)
 1;
 
 =pod
-=item helper
 =item summary    Connection to an external MQTT server
 =item summary_DE Verbindung zu einem externen MQTT Server
 =begin html
@@ -550,7 +550,9 @@ MQTT2_CLIENT_getStr($$)
       json2nameValue($EVENT, 'SENSOR_', $JSONMAP). Which one is better depends
       on the attached devices and on the personal taste, and it is only
       relevant for json payload. For non-json payload there is no difference
-      between simple and complex.
+      between simple and complex.<br>
+      Default is no, as in absence of an MQTT2_DEVICE with a bridgeRegexp
+      attribute it is not really useful.
       </li></br>
 
     <a name="clientId"></a>

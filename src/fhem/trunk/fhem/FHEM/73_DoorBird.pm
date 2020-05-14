@@ -1,4 +1,4 @@
-# $Id: 73_DoorBird.pm 20995 2020-01-16 19:38:54Z Sailor $
+# $Id: 73_DoorBird.pm 21418 2020-03-13 19:38:37Z Sailor $
 ########################################################################################################################
 #
 #     73_DoorBird.pm
@@ -7,7 +7,7 @@
 #     Author                     : Matthias Deeke 
 #     e-mail                     : matthias.deeke(AT)deeke(DOT)eu
 #     Fhem Forum                 : https://forum.fhem.de/index.php/topic,100758
-#     Fhem Wiki                  : 
+#     Fhem Wiki                  : https://wiki.fhem.de/wiki/DoorBird
 #
 #     This file is part of fhem.
 #
@@ -48,11 +48,13 @@ use utf8;
 use JSON;
 use HttpUtils;
 use Encode;
+use FHEM::Meta;
 use Cwd;
 use MIME::Base64;
 use Crypt::NaCl::Sodium qw( :utils );
 use Crypt::Argon2 qw/argon2i_raw/;
 use IO::Socket;
+use IO::String;			   
 use LWP::UserAgent;
 use constant false => 0;
 use constant true  => 1;
@@ -72,6 +74,7 @@ sub DoorBird_Initialize($)
 	$hash->{ReadFn}          = "DoorBird_Read";
 	$hash->{DbLog_splitFn}   = "DoorBird_DbLog_splitFn";
 	$hash->{FW_detailFn}     = "DoorBird_FW_detailFn";
+	$hash->{NotifyFn}        = "DoorBird_Notify";										  
 
     $hash->{AttrList}        = "do_not_notify:1,0 " .
 							   "header " .
@@ -93,6 +96,7 @@ sub DoorBird_Initialize($)
 							   "disable:1,0 " .
 						       "loglevel:slider,0,1,5 " .
 						       $readingFnAttributes;
+	return FHEM::Meta::InitMod( __FILE__, $hash );
 }
 ####END####### Initialize module ###############################################################################END#####
 
@@ -210,6 +214,52 @@ sub DoorBird_Define($$)
 	Log3 $name, 5, $name. " : DoorBird - Define OpsModeList                     : " . Dumper(@{$hash->{helper}{OpsModeList}});
 	Log3 $name, 5, $name. " : DoorBird - Define OpsModeListBackup[0]            : " . ${$hash->{helper}{OpsModeListBackup}}[0];
 	
+	### Notify this device after changes on global variables
+	$hash->{NOTIFYDEV} = "global,";
+
+	### Call intitialization of sub if the initialization is done
+	DoorBird_InitializeDevice($hash) if ($init_done);
+	
+	return undef;
+}
+####END####### Activate module after module has been used via fhem command "define" ############################END#####
+
+
+###START###### Handle Notifications received by this module  ##################################################START####
+sub DoorBird_Notify($$)
+{
+	my ($hash, $dev) = @_;
+	my $name    = $hash->{NAME};
+	my $devName = $dev->{NAME}; # Device that created the events
+	my $events  = deviceEvents($dev, 1);
+
+	### For Debugging purpose only 
+	Log3 $name, 5, $name. " : DoorBird - DoorBird_Notify devname                : " . $devName;
+	Log3 $name, 5, $name. " : DoorBird - DoorBird_Notify events                 : " . Dumper($events);
+
+	### Return without any further action if the module is disabled
+	return "" if(IsDisabled($name));
+
+	### If the global variables notified an update and matches
+	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}))
+	{
+		### For Debugging purpose only 
+		Log3 $name, 5, $name. " : DoorBird_Notify                                   : fhem system has been initialized or config has been re-read.";
+		
+		### Call initialization 
+		DoorBird_InitializeDevice($hash);
+	}
+	
+	return undef;
+}
+###END######## Handle Notifications received by this module  ####################################################END####
+
+
+##START###### Initialize the device when all attributes are available ########################################START####
+sub DoorBird_InitializeDevice($)
+{
+	my($hash) = @_;
+	my $name    = $hash->{NAME};
 
 	### Initialize Socket connection
 	DoorBird_OpenSocketConn($hash);
@@ -223,10 +273,12 @@ sub DoorBird_Define($$)
 	InternalTimer(gettimeofday()+ $hash->{helper}{KeepAliveTimeout}	, "DoorBird_LostConn",       $hash, 0);
 	InternalTimer(gettimeofday()+ 10,                                 "DoorBird_RenewSessionID", $hash, 0);
 
+	### For Debugging purpose only 
+	Log3 $name, 3, $name. " : DoorBird_InitializeDevice                         : DoorBird has been initialized";
+
 	return undef;
 }
-####END####### Activate module after module has been used via fhem command "define" ############################END#####
-
+###END######## Initialize the device when all attributes are available #########################################END####
 
 ###START###### To bind unit of value to DbLog entries #########################################################START####
 # sub DoorBird_DbLog_splitFn($$)
@@ -247,8 +299,12 @@ sub DoorBird_Undefine($$)
 	RemoveInternalTimer($hash);
 
 	### Close UDP scanning
-	DevIo_CloseDev($hash);
-	
+	delete $selectlist{$name};
+	if (defined($hash->{CD})) {
+		$hash->{CD}->close();
+		delete $hash->{CD};
+	}
+	delete $hash->{FD};
 	### Add Log entry
 	Log3 $name, 3, $name. " - DoorBird has been undefined. The DoorBird unit will no longer polled.";
 
@@ -297,6 +353,9 @@ sub DoorBird_Attr(@)
 		if ($a[3] == int($a[3])) {
 			### Set helper in hash
 			$hash->{helper}{UdpPort} = $a[3];
+			
+			### Call initialization 
+			DoorBird_InitializeDevice($hash);
 		}
 	}
 	### Check whether PollingTimeout attribute has been provided
@@ -368,13 +427,17 @@ sub DoorBird_Attr(@)
 			### Check whether SessionIdSec is 0 = disabled
 			if ($a[3] == int($a[3]) && ($a[3] == 0)) {
 				### Save attribute as internal
-				$hash->{helper}{SessionIdSec}  = 0;
+				$hash->{helper}{SessionIdSec} = 0;
+				$hash->{helper}{SessionId}    = 0;
 			}
 			### If KeepAliveTimeout is numeric and greater than 9s
 			elsif ($a[3] == int($a[3]) &&  ($a[3] > 9)) {
 
 				### Save attribute as internal
-				$hash->{helper}{SessionIdSec}  = $a[3];
+				$hash->{helper}{SessionIdSec} = $a[3];
+
+				### Obtain SessionId
+				DoorBird_RenewSessionID($hash);
 
 				### Re-Initiate the timer
 				InternalTimer(gettimeofday()+$hash->{helper}{SessionIdSec}, "DoorBird_RenewSessionID", $hash, 0);
@@ -383,6 +446,9 @@ sub DoorBird_Attr(@)
 			else{
 				### Save standard interval as internal
 				$hash->{helper}{SessionIdSec}  = 540;
+				
+				### Obtain SessionId
+				DoorBird_RenewSessionID($hash);
 				
 				### Re-Initiate the timer
 				InternalTimer(gettimeofday()+$hash->{helper}{SessionIdSec}, "DoorBird_RenewSessionID", $hash, 0);
@@ -393,6 +459,9 @@ sub DoorBird_Attr(@)
 			### Save standard interval as internal
 			$hash->{helper}{SessionIdSec}  = 540;
 			
+			### Obtain SessionId
+			DoorBird_RenewSessionID($hash);
+				
 			### Re-Initiate the timer
 			InternalTimer(gettimeofday()+$hash->{helper}{SessionIdSec}, "DoorBird_RenewSessionID", $hash, 0);
 		}
@@ -582,7 +651,7 @@ sub DoorBird_Get($@)
 	
 	### If DoorBird has a Camera installed
 	if ($hash->{helper}{CameraInstalled} == true) {
-		$usage .= "Image_Request:noArg History_Request:noArg "
+		$usage .= "Image_Request:noArg History_Request:noArg Video_Request "
 	}
 	### If DoorBird has NO Camera installed
 	else {
@@ -599,10 +668,20 @@ sub DoorBird_Get($@)
 		### Call Subroutine and hand back return value
 		return DoorBird_Info_Request($hash, $option);
 	}
-	### LIVE IMAGE REQUEST
+	### IMAGE REQUEST
 	elsif ($command eq "Image_Request") {
 		### Call Subroutine and hand back return value
 		return DoorBird_Image_Request($hash, $option);
+	}
+	### VIDEO REQUEST
+	elsif ($command eq "Video_Request") {
+		my $VideoDuration = 10;
+		### If the duration has been given use it. Otherwise use 10s
+		if ( $optionString == int($optionString) and $optionString eq int($optionString) and $optionString > 0 ) {
+			$VideoDuration = $optionString;
+		}
+		### Call Subroutine and hand back return value
+		return DoorBird_Video_Request($hash, $VideoDuration, "manual", time());
 	}
 	### HISTORY IMAGE REQUEST
 	elsif ($command eq "History_Request") {
@@ -673,8 +752,9 @@ sub DoorBird_Set($@)
 	
 	### Define "set" menu
 	my $usage	= "Unknown argument, choose one of";
-		$usage .= " Test";
+		#$usage .= " Test";
 		$usage .= " Open_Door:" . join(",", @RelayAdresses) . " OpsMode:" . join(",", @OpsModeList) . " Restart:noArg Transmit_Audio";
+		$usage .= " Receive_Audio";
 
 	### If the OpsModeList is not empty
 	if ((defined(${$hash->{helper}{OpsModeList}}[0])) && (${$hash->{helper}{OpsModeList}}[0] ne "")) {
@@ -807,7 +887,6 @@ sub DoorBird_Set($@)
 		### Call Subroutine and hand back return value
 		return DoorBird_Light_On($hash, $option)	
 	}
-	
 	### RESTART
 	elsif ($command eq "Restart") {
 		### Call Subroutine and hand back return value
@@ -818,17 +897,15 @@ sub DoorBird_Set($@)
 		### Call Subroutine and hand back return value
 		return DoorBird_Live_Audio($hash, $option)	
 	}
-	### LIVE AUDIO TRANSMIT
+	### AUDIO RECEIVE
+	elsif ($command eq "Receive_Audio") {
+		### Call Subroutine and hand back return value
+		return DoorBird_Receive_Audio($hash, $option)	
+	}
+	### AUDIO TRANSMIT
 	elsif ($command eq "Transmit_Audio") {
 		### Call Subroutine and hand back return value
 		return DoorBird_Transmit_Audio($hash, $option)	
-	}
-	### TEST
-	elsif ($command eq "Test") {
-		### Call Subroutine and hand back return value
-		DoorBird_Video_Request($hash, 10, "doorbell_001", 1571506485);
-		
-		return;
 	}
 	### ADD OR CHANGE FAVORITE
 	### DELETE FAVORITE
@@ -1929,7 +2006,6 @@ sub DoorBird_FW_detailFn($$$$) {
 					<td id="ImageCell" width="430px" height="300px" align="center">
 						' . $ImageHtmlCode  . '
 					</td>
-
 					<td id="ImageCell" width="435px" height="300px" align="center">
 						' . $VideoHtmlCode . '<BR>
 					</td>
@@ -1958,7 +2034,6 @@ sub DoorBird_FW_detailFn($$$$) {
 					<tr>
 						<td align="center" colspan="5"><b>History of events - Last download: ' . $hash->{helper}{HistoryTime} . '</b></td>
 					</tr>
-
 					<tr>
 						<td align="center" colspan="2"><b>Doorbell</b></td>
 						<td align="center"></td>
@@ -2160,9 +2235,6 @@ sub DoorBird_Info_Request($$) {
 					readingsBulkUpdate($hash, $key, $VersionContent -> {$key} );
 				}
 			}
-			### Update Reading for Firmware-Status
-			readingsBulkUpdate($hash, "Firmware-Status", "up-to-date");
-
 			### Update SessionId
 			DoorBird_RenewSessionID($hash);
 
@@ -2200,16 +2272,15 @@ sub DoorBird_FirmwareStatus($) {
 	### Log Entry for debugging purposes
 	Log3 $name, 5, $name. " : DoorBird_FirmwareStatus - Checking firmware status on doorbird page";
 	
-	my $FirmwareVersionUnit = ReadingsVal($name, "FIRMWARE", 0);
+	my $FirmwareVersionUnit = ReadingsVal($name, "FIRMWARE"   , 0        );
+	my $FirmwareDevice      = ReadingsVal($name, "DEVICE-TYPE", "unknown");
 
 	### Download website of changelocks
 	my $html = GetFileFromURL("https://www.doorbird.com/changelog");
 	
-	### Get the latest firmware number
-	my $result;
-	if ($html =~ /(?<=Firmware version )(.*)(?=\n=====)/) {
-		$result = $1;
-	}
+	### Get the latest firmware number for this product
+	my $versions = DoorBird_parseChangelog($hash, $html);
+	my $result   = DoorBird_findNewestFWVersion($hash, $versions, $FirmwareDevice);
 
 	### Log Entry for debugging purposes
 	Log3 $name, 5, $name. " : DoorBird_FirmwareStatus - result                  : " . $result;
@@ -2299,7 +2370,7 @@ sub DoorBird_Live_Video($$) {
 }
 ####END####### Define Subfunction for LIVE VIDEO REQUEST #######################################################END#####
 
-###START###### Define Subfunction for LIVE AUDIO REQUEST ######################################################START####
+###START###### Define Subfunction for LIVE VIDEO REQUEST ######################################################START####
 sub DoorBird_Live_Audio($$) {
 	my ($hash, $option)	= @_;
 
@@ -2308,7 +2379,7 @@ sub DoorBird_Live_Audio($$) {
 	my $url 			= $hash->{helper}{URL};
 	
 	### Create complete command URL for DoorBird depending on whether SessionIdSecurity has been enabled (>0) or disabled (=0)
-	my $UrlPrefix 		= "http://" . $url . "/bha-api/";
+	my $UrlPrefix 		= "http://" . $url . "/bha-api/audio-receive.cgi";
 	my $UrlPostfix;
 	if ($hash->{helper}{SessionIdSec} > 0) {
 		$UrlPostfix 	= "?sessionid=" . $hash->{helper}{SessionId};
@@ -2318,7 +2389,7 @@ sub DoorBird_Live_Audio($$) {
 		my $password	= DoorBird_credential_decrypt($hash->{helper}{".PASSWORD"});
 		$UrlPostfix 	= "?http-user=". $username . "&http-password=" . $password;
 	}
-	my $AudioURL 		= $UrlPrefix . "audio-receive.cgi" . $UrlPostfix;
+	my $AudioURL 		= $UrlPrefix . $UrlPostfix;
 
 	### Log Entry for debugging purposes
 	Log3 $name, 5, $name. " : DoorBird_Live_Audio - AudioURL                    : " . $AudioURL ;
@@ -2349,6 +2420,7 @@ sub DoorBird_Live_Audio($$) {
 	return
 }
 ####END####### Define Subfunction for LIVE VIDEO REQUEST #######################################################END#####
+
 
 ###START###### Define Subfunction for LIVE IMAGE REQUEST ######################################################START####
 sub DoorBird_Image_Request($$) {
@@ -2894,7 +2966,7 @@ sub DoorBird_Light_On($$) {
 }
 ####END####### Define Subfunction for LIGHT ON #################################################################END#####
 
-###START###### Define Subfunction for LIVE AUDIO TRANSMIT #####################################################START####
+###START###### Define Subfunction for TRANSMIT AUDIO REQUEST ##################################################START####
 sub DoorBird_Transmit_Audio($$) {
 	my ($hash, $option)	= @_;
 	
@@ -2956,21 +3028,21 @@ sub DoorBird_Transmit_Audio($$) {
 		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - AudioLength in seconds  : " . $AudioLength;
 		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - New Filesize            : " . $AudioDataSizeNew;
 
-		### Create complete command URL for DoorBird depending on whether SessionIdSecurity has been enabled (>0) or disabled (=0)
-		my $UrlPrefix 		= "http://" . $Url . "/bha-api/";
+				### Create complete command URL for DoorBird depending on whether SessionIdSecurity has been enabled (>0) or disabled (=0)
+		my $UrlPrefix 	= "http://" . $Url . "/bha-api/audio-transmit.cgi";
 		my $UrlPostfix;
 		
-		### If the Session ID has been activated
-		if ($hash->{helper}{SessionIdSec} > 0) {
-			$UrlPostfix 	= " sessionid=" . $hash->{helper}{SessionId} . " content-type=\"audio/basic\" use-content-length=true";			
+		### If SessionIdSec is enabled
+		if ($hash->{helper}{SessionIdSec} != 0) {
+			   $UrlPostfix 	= "?sessionid=" . $hash->{helper}{SessionId} . " content-type=\"audio/basic\" use-content-length=true";
 		}
-		### If the Session ID has NOT been activated use username and password instead
+		### Id SessionID Security is disabled
 		else {
 			my $username 	= DoorBird_credential_decrypt($hash->{helper}{".USER"});
 			my $password	= DoorBird_credential_decrypt($hash->{helper}{".PASSWORD"});
-			$UrlPostfix 	= " content-type=\"audio/basic\" use-content-length=true user=". $username . " passwd=" . $password;
+			   $UrlPostfix 	= " content-type=\"audio/basic\" use-content-length=true user=" . $username . " passwd=" . $password;
 		}
-		my $CommandURL 		= $UrlPrefix . "audio-transmit.cgi" . $UrlPostfix;
+		my $CommandURL 	= $UrlPrefix . $UrlPostfix;
 
 		### Log Entry for debugging purposes
 		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - CommandURL              : " . $CommandURL ;
@@ -2982,7 +3054,7 @@ sub DoorBird_Transmit_Audio($$) {
 		   $GstCommand .= $CommandURL;
 
 		### Log Entry for debugging purposes
-		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - GstCommand              : " . $GstCommand ;
+		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - GstCommand              : " . $GstCommand;
 
 		### Create command for shell
 		my $ShellCommand  = "timeout " . ($AudioLength + 3) . " " . $GstCommand . " &";
@@ -2994,11 +3066,8 @@ sub DoorBird_Transmit_Audio($$) {
 		eval {
 						system($ShellCommand) or die "Could not execute" . $ShellCommand . " ". $@;
 		};
-		### If error message appered
-		if ( $@ ) {
-		#				$ErrorMessage = $@;
-			}
 
+		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - File streamed successf. : " . $AudioDataPathOrig;
 		Log3 $name, 5, $name. " : DoorBird_Transmit_Audio - ---------------------------------------------------------------";
 		return "The audio file: " . $AudioDataPathOrig . " has been streamed to the DoorBird";
 	}
@@ -3010,7 +3079,89 @@ sub DoorBird_Transmit_Audio($$) {
 		return "The audio file: " . $AudioDataPathOrig . " does not exist!"
 	}
 }
-####END####### Define Subfunction for LIVE AUDIO TRANSMIT ######################################################END#####
+####END####### Define Subfunction for TRANSMIT AUDIO REQUEST ###################################################END#####
+
+###START###### Define Subfunction for RECEIVE AUDIO REQUEST ###################################################START####
+sub DoorBird_Receive_Audio($$) {
+	my ($hash, $option)	= @_;
+	
+	### Obtain values from hash
+	my $name				= $hash->{NAME};
+	my $Username 			= DoorBird_credential_decrypt($hash->{helper}{".USER"});
+	my $Password			= DoorBird_credential_decrypt($hash->{helper}{".PASSWORD"});
+	my $Url 				= $hash->{helper}{URL};
+	my $Sox					= $hash->{helper}{SOX};
+	my $AudioDataPathOrig	= $option;
+	
+	### For Test only
+	my $AudioLength = 7;
+	
+	### Log Entry for debugging purposes
+	Log3 $name, 5, $name. " : DoorBird_Live_Audio  - ---------------------------------------------------------------";
+	
+	### If file does not exist already
+	if ((-e $AudioDataPathOrig) == false) {
+		### Create new filepath from old filepath
+		my $AudioDataNew;
+		my $AudioDataSizeNew;
+		my $AudioDataPathNew  = $AudioDataPathOrig;
+		   $AudioDataPathNew  =~ s/\..*//;
+		   $AudioDataPathNew .= ".mp3";
+
+		### Create complete command URL for DoorBird depending on whether SessionIdSecurity has been enabled (>0) or disabled (=0)
+		my $UrlPrefix 	= "http://" . $Url . "/bha-api/audio-receive.cgi";
+		my $UrlPostfix;
+		
+		### If SessionIdSec is enabled
+		if ($hash->{helper}{SessionIdSec} != 0) {
+			   $UrlPostfix 	= "?sessionid=" . $hash->{helper}{SessionId};
+		}
+		### Id SessionID Security is disabled
+		else {
+			my $username 	= DoorBird_credential_decrypt($hash->{helper}{".USER"});
+			my $password	= DoorBird_credential_decrypt($hash->{helper}{".PASSWORD"});
+			   $UrlPostfix 	= " user=" . $username . " passwd=" . $password;
+		}
+		my $CommandURL 	= $UrlPrefix . $UrlPostfix;
+
+
+		### Log Entry for debugging purposes
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - CommandURL              : " . $CommandURL ;
+
+		### Create the gst-lauch command
+		my $GstCommand  = "gst-launch-1.0 filesrc location=<"; 
+		   $GstCommand .= $CommandURL;
+		   $GstCommand .=  "> ! wavparse ! audioconvert ! lame ! filesink location=";
+		   $GstCommand .= $AudioDataPathNew;
+
+		### Log Entry for debugging purposes
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - GstCommand              : " . $GstCommand;
+
+		### Create command for shell
+		my $ShellCommand  = "timeout " . ($AudioLength + 3) . " " . $GstCommand . " &";
+		
+		### Log Entry for debugging purposes
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - ShellCommand            : " . $ShellCommand;
+
+		### Pass shell command to shell and continue with the code below
+		eval {
+						system($ShellCommand) or die "Could not execute" . $ShellCommand . " ". $@;
+		};
+
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - File streamed successf. : " . $AudioDataPathOrig;
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - ---------------------------------------------------------------";
+		return "The audio file: " . $AudioDataPathOrig . " has been streamed to the DoorBird";
+	}
+	### If Filepath does not exist
+	else {
+		### Log Entry
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - Path doesn't exist      : " . $AudioDataPathOrig;
+		Log3 $name, 1, $name. " : DoorBird_Live_Audio - ---------------------------------------------------------------";
+		return "The audio file: " . $AudioDataPathOrig . " does not exist!"
+	}
+}
+####END####### Define Subfunction for RECEIVE VIDEO REQUEST ####################################################END#####
+
 
 ###START###### Define Subfunction for HISTORY IMAGE REQUEST ###################################################START####
 ### https://wiki.fhem.de/wiki/HttpUtils#HttpUtils_NonblockingGet
@@ -3442,6 +3593,9 @@ sub DoorBird_Video_Request($$$$) {
 	}
 	elsif ($event =~ m/keypad/ ){
 		$ReadingVideo 			= "keypad_video";
+	}
+	elsif ($event =~ m/manual/ ){
+		$ReadingVideo 			= "manual_video";
 	}
 	else {
 		### Create Log entry
@@ -3917,14 +4071,9 @@ sub DoorBird_SipStatus_Request($$) {
 					readingsBulkUpdate($hash, "SIP_" . $key, $VersionContent -> {$key} );
 				}
 			}
-			### Update Reading for Firmware-Status
-			readingsBulkUpdate($hash, "Firmware-Status", "up-to-date");
 
 			### Execute Readings Bulk Update
 			readingsEndUpdate($hash, 1);
-
-			### Check for Firmware-Updates
-			DoorBird_FirmwareStatus($hash);
 			
 			return "Readings have been updated!\n";
 		}
@@ -4013,6 +4162,95 @@ sub DoorBird_BlockGet($$$$) {
 	return($err, $data);
 }
 ####END####### Blocking Get ####################################################################################END#####
+
+
+###START###### Processing Change Log ##########################################################################START####
+# Changelog parser for DoorBird changelog as of 2020-02-22 (or earlier) containing multiple product lines. 
+# Returns a hash ref containing the newest version number for each product name or prefix found.
+#
+# Prefixes are denoted by a trailing 'x', as in the original changelog. Note:
+# this means that still multiple versions matching a single product could be in the hash, 
+# e. g. for different prefixes all matching the final product name.
+
+sub DoorBird_parseChangelog($$)
+{
+	my ($hash, $data) = @_;
+	my $name = $hash->{NAME};
+
+	my $lines = IO::String->new($data);
+	my $all_versions;
+	my $version;
+
+	### For all lines do
+	while(my $line = <$lines>) 	{
+
+		### If the line contains the keywords "Firmware version " followed by a number then obtain it
+		if ($line =~ /^Firmware version (\d{6})$/) 	{
+			$version = $1;
+		}
+
+		### If the line contains the keywords "Products affected: " then obtain it
+		elsif ($line =~ /^Products affected: (.*)$/) {
+
+			### If version is already obtained from the changelog
+			if (defined($version)) {
+				
+				### Split the product names into an array
+				my @products = split(/,\s*/, $1);
+
+				### For each product name mentioned in the changelog
+				foreach my $product (@products) {
+					### Apparently the line of the "Products affected" in current changelog file is not closed with an \r so we ignore this array - entry
+					next if $product =~ /Preceding version: /;
+					
+					### If the Product version for the firmware ha snot yet been defined or the already obtaine version number is older than the current value
+					if (!defined($all_versions->{$product}) or 0 + $all_versions->{$product} < 0 + $version) {
+						
+						### Log Entry for debugging purposes
+						Log3 $name, 5, $name. " : DoorBird_parseChangelog - found firmware version  : " . $version . " for " . $product;
+						
+						### Save latest firmware version
+						$all_versions->{$product} = $version;
+					}
+				}
+				undef $version;
+			}
+			### If version cannot be found
+			else
+			{
+				### Log Entry for debugging purposes
+				Log3 $name, 3, $name. " : DoorBird_parseChangelog - Products without version found in changelog, ignored.";
+			}
+		}
+	}
+	return $all_versions;
+}
+
+# Find newest firmware version for this device by name or prefix.
+# The versions hash ref expected as second argument should match the format returned from DoorBird_parseChangelog().
+sub DoorBird_findNewestFWVersion($$$)
+{
+	my ($hash, $versions, $product_name) = @_;
+	my $name	 = $hash->{NAME};
+	my $newest = 0;
+
+	### For all version entries
+	foreach my $product (sort keys %$versions)
+	{
+		### Optional prefix matching
+		my $prefix = $product;
+		$prefix =~ s/x$//;
+
+		### If the installed product name is (partial) identical with the product name given in the changelog file entry
+		if (length($prefix) <= length($product_name) and $prefix eq substr($product_name, 0, length($prefix)) and 0 + $newest < 0 + $versions->{$product}) {
+			$newest = $versions->{$product};
+		}
+	}
+
+	return $newest;
+}
+####END####### Processing Change Log ###########################################################################END#####
+
 1;
 
 ###START###### Description for fhem commandref ################################################################START####
@@ -4020,7 +4258,6 @@ sub DoorBird_BlockGet($$$$) {
 =item device
 =item summary    Connects fhem to the DoorBird IP door station
 =item summary_DE Verbindet fhem mit der DoorBird IP T&uuml;rstation
-
 =begin html
 
 <a name="DoorBird"></a>
@@ -4037,6 +4274,7 @@ sub DoorBird_BlockGet($$$$) {
 					<li>sudo apt-get install sox					</li>
 					<li>sudo apt-get install libsox-fmt-all			</li>
 					<li>sudo apt-get install libsodium-dev			</li>
+					<li>sudo apt-get install gstreamer1.0-tools     </li>
 					<li>sudo cpan Crypt::Argon2						</li>
 					<li>sudo cpan Alien::Base::ModuleBuild			</li>
 					<li>sudo cpan Alien::Sodium						</li>
@@ -4046,7 +4284,6 @@ sub DoorBird_BlockGet($$$$) {
 		</tr>
 	</table>
 	<BR>
-
 	<table>
 		<tr>
 			<td>
@@ -4054,7 +4291,6 @@ sub DoorBird_BlockGet($$$$) {
 			</td>
 		</tr>
 	</table>
-
 	<table>
 		<tr>
 			<td>
@@ -4064,7 +4300,6 @@ sub DoorBird_BlockGet($$$$) {
 			</td>
 		</tr>
 	</table>
-
 	<ul>
 		<ul>
 			<table>
@@ -4075,15 +4310,11 @@ sub DoorBird_BlockGet($$$$) {
 			</table>
 		</ul>
 	</ul>
-
 	<BR>
-
 	<table>
 		<tr><td><a name="DoorBirdSet"></a><b>Set</b></td></tr>
 		<tr><td><ul>The set function is able to change or activate the following features as follows:</ul></td></tr>
 	</table>
-
-
 	<table>
 		<tr><td><ul><code>set Light_On                    </code></ul></td><td> : Activates the IR lights of the DoorBird unit. The IR - light deactivates automatically by the default time within the Doorbird unit																			</td></tr>
 		<tr><td><ul><code>set Live_Audio &lt;on:off&gt;   </code></ul></td><td> : Activate/Deactivate the Live Audio Stream of the DoorBird on or off and toggles the direct link in the <b>hidden</b> Reading <code>.AudioURL</code>															</td></tr>
@@ -4092,8 +4323,6 @@ sub DoorBird_BlockGet($$$$) {
 		<tr><td><ul><code>set Restart                     </code></ul></td><td> : Sends the command to restart (reboot) the Doorbird unit																																						</td></tr>
 		<tr><td><ul><code>set Transmit_Audio &lt;Path&gt; </code></ul></td><td> : Converts a given audio file and transmits the stream to the DoorBird speaker. Requires a datapath to audio file to be converted and send. The user "fhem" needs to have write access to this directory.<BR>	</td></tr>
 	</table>
-
-
 	<table>
 		<tr><td><a name="DoorBirdGet"></a><b>Get</b></td></tr>
 		<tr><td>
@@ -4105,10 +4334,9 @@ sub DoorBird_BlockGet($$$$) {
 	<table>
 		<tr><td><ul><code>get History_Request             </code></ul></td><td> : Downloads the pictures of the last events of the doorbell and motion sensor. (Refer to attribute <code>MaxHistory</code>)																						</td></tr>
 		<tr><td><ul><code>get Image_Request               </code></ul></td><td> : Downloads the current Image of the camera of DoorBird unit.																																					</td></tr>
+		<tr><td><ul><code>get Video_Request &lt;Value&gt; </code></ul></td><td> : Downloads the current Video of the camera of DoorBird unit for th etime in seconds given.																														</td></tr>
 		<tr><td><ul><code>get Info_Request                </code></ul></td><td> : Downloads the current internal setup such as relay configuration, firmware version etc. of the DoorBird unit. The obtained relay adresses will be used as options for the <code>Open_Door</code> command.		</td></tr>
 	</table>
-
-
 	<table>
 		<tr><td><a name="DoorBirdAttr"></a><b>Attributes</b></td></tr>
 		<tr><td>
@@ -4117,7 +4345,6 @@ sub DoorBird_BlockGet($$$$) {
 			</ul>
 		</td></tr>
 	</table>
-
 	<ul>
 		<table>
 			<tr>
@@ -4142,21 +4369,18 @@ sub DoorBird_BlockGet($$$$) {
 				<td>
 					<code>PollingTimeout</code> : </td><td>Timeout in seconds before download requests are terminated in cause of no reaction by DoorBird unit. Might be required to be adjusted due to network speed.<BR>
 																   The default value is 10s.<BR>
-
 				</td>
 			</tr>
 			<tr>
 				<td>
 					<code>UdpPort</code> : </td><td>Port number to be used to receice UDP datagrams. Ports are pre-defined by firmware.<BR>
 																   The default value is port 6524<BR>
-
 				</td>
 			</tr>
 			<tr>
 				<td>
 					<code>SessionIdSec</code> : </td><td>Time in seconds for how long the session Id shall be valid, which is required for secure Video and Audio transmission. The DoorBird kills the session Id after 10min = 600s automatically. In case of use with CCTV recording units, this function must be disabled by setting to 0.<BR>
 																   The default value is 540s = 9min.<BR>
-
 				</td>
 			</tr>
 			<tr>
@@ -4217,8 +4441,6 @@ sub DoorBird_BlockGet($$$$) {
 	</ul>
 </ul>
 =end html
-
-
 =begin html_DE
 
 <a name="DoorBird"></a>
@@ -4235,6 +4457,7 @@ sub DoorBird_BlockGet($$$$) {
 					<li>sudo apt-get install sox					</li>
 					<li>sudo apt-get install libsox-fmt-all			</li>
 					<li>sudo apt-get install libsodium-dev			</li>
+					<li>sudo apt-get install gstreamer1.0-tools     </li>
 					<li>sudo cpan Crypt::Argon2						</li>
 					<li>sudo cpan Alien::Base::ModuleBuild			</li>
 					<li>sudo cpan Alien::Sodium						</li>
@@ -4244,7 +4467,6 @@ sub DoorBird_BlockGet($$$$) {
 		</tr>
 	</table>
 	<BR>
-
 	<table>
 		<tr>
 			<td>
@@ -4252,7 +4474,6 @@ sub DoorBird_BlockGet($$$$) {
 			</td>
 		</tr>
 	</table>
-
 	<table>
 		<tr>
 			<td>
@@ -4262,7 +4483,6 @@ sub DoorBird_BlockGet($$$$) {
 			</td>
 		</tr>
 	</table>
-
 	<ul>
 		<ul>
 			<table>
@@ -4273,14 +4493,11 @@ sub DoorBird_BlockGet($$$$) {
 			</table>
 		</ul>
 	</ul>
-
 	<BR>
-
 	<table>
 		<tr><td><a name="DoorBirdSet"></a><b>Set</b></td></tr>
 		<tr><td><ul>Die Set - Funktion ist in der lage auf der DoorBird - Anlage die folgenden Einstellungen vorzunehmen bzw. zu de-/aktivieren:</ul><BR></td></tr>
 	</table>
-
 	<table>
 		<tr><td><ul><code>set Light_On                    </code></ul></td><td> : Schaltet das IR lichht der DoorBird Anlage ein. Das IR Licht schaltet sich automatisch nach der in der DoorBird - Anlage vorgegebenen Default Zeit wieder aus.																	</td></tr>
 		<tr><td><ul><code>set Live_Audio &lt;on:off&gt;   </code></ul></td><td> : Aktiviert/Deaktiviert den Live Audio Stream der DoorBird - Anlage Ein oder Aus und wechselt den direkten link in dem <b>versteckten</b> Reading <code>.AudioURL.</code>															</td></tr>
@@ -4289,8 +4506,6 @@ sub DoorBird_BlockGet($$$$) {
 		<tr><td><ul><code>set Restart                     </code></ul></td><td> : Sendet das Kommando zum rebooten der DoorBird - Anlage.																																											</td></tr>
 		<tr><td><ul><code>set Transmit_Audio &lt;Path&gt; </code></ul></td><td> : Konvertiert die angegebene Audio-Datei und sendet diese zur Ausgabe an die DoorBird - Anlage. Es ben&ouml;tigt einen Dateipfad zu der Audio-Datei zu dem der User "fhem" Schreibrechte braucht (z.B.: /opt/fhem/audio).			</td></tr>
 	</table>
-
-
 	<table>
 		<tr><td><a name="DoorBirdGet"></a><b>Get</b></td></tr>
 		<tr><td><ul>Die Get - Funktion ist in der lage von der DoorBird - Anlage die folgenden Informationen und Daten zu laden:<BR><BR></ul></td></tr>
@@ -4298,10 +4513,9 @@ sub DoorBird_BlockGet($$$$) {
 	<table>
 		<tr><td><ul><code>get History_Request             </code></ul></td><td> : L&auml;dt die Bilder der letzten Ereignisse durch die T&uuml;rklingel und dem Bewegungssensor herunter. (Siehe auch Attribut <code>MaxHistory</code>)</td></tr>
 		<tr><td><ul><code>get Image_Request               </code></ul></td><td> : L&auml;dt das gegenw&auml;rtige Bild der DoorBird - Kamera herunter.</td></tr>
+		<tr><td><ul><code>get Video_Request &lt;Value&gt; </code></ul></td><td> : L&auml;dt das gegenw&auml;rtige Video der DoorBird - Kamera f&uumlr die gegebene Zeit in Sekunden herunter.</td></tr>
 		<tr><td><ul><code>get Info_Request                </code></ul></td><td> : L&auml;dt das interne Setup (Firmware Version, Relais Konfiguration etc.) herunter. Die &uuml;bermittelten Relais-Adressen werden als Option f&uuml;r das Kommando <code>Open_Door</code> verwendet.</td></tr>
 	</table>
-
-
 	<table>
 		<tr><td><a name="DoorBirdAttr"></a><b>Attributes</b></td></tr>
 		<tr><td>
@@ -4310,7 +4524,6 @@ sub DoorBird_BlockGet($$$$) {
 			</ul>
 		</td></tr>
 	</table>
-
 	<ul>
 		<table>
 			<tr>
@@ -4406,9 +4619,7 @@ sub DoorBird_BlockGet($$$$) {
 	</ul>
 </ul>
 =end html_DE
-
 =encoding utf8
-
 =for :application/json;q=META.json 73_DoorBird.pm
 {
   "abstract": "Connects fhem to the DoorBird IP door station",
@@ -4439,6 +4650,7 @@ sub DoorBird_BlockGet($$$$) {
         "Alien::Sodium": 0,
         "Crypt::Argon2": 0,
         "Crypt::NaCl::Sodium": 0,
+		"IO::String": 0,
         "Cwd": 0,
         "Data::Dumper": 0,
         "Encode": 0,
@@ -4464,7 +4676,8 @@ sub DoorBird_BlockGet($$$$) {
       "requires": {
         "sox": 0,
         "libsox-fmt-all": 0,
-        "libsodium-dev": 0
+        "libsodium-dev": 0,
+		"gstreamer1.0-tools": 0
       },
       "recommends": {
       },
@@ -4474,5 +4687,4 @@ sub DoorBird_BlockGet($$$$) {
   }
 }
 =end :application/json;q=META.json
-
 =cut

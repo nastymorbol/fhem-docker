@@ -1,5 +1,5 @@
 #############################################
-# $Id: 98_DOIFtools.pm 19948 2019-08-04 15:53:01Z Ellert $
+# $Id: 98_DOIFtools.pm 21361 2020-03-06 05:16:58Z Ellert $
 # 
 # This file is part of fhem.
 # 
@@ -251,7 +251,8 @@ function doiftoolsRemoveLookUp () {
     $('#addLookUp').dialog( "close" );
 }
 function doiftoolsAddLookUp () {
-    var tn = $(this).text();
+    var tnx = (""+this).split("=");
+    var tn = tnx[1];
     var target = this;
     var txt = "Internals<table class='block wide internals' style='font-size:12px'>";
     FW_cmd(FW_root+"?cmd=jsonlist2 "+tn+"&XHR=1", function(data){

@@ -21,7 +21,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with fhem.  If not, see <http://www.gnu.org/licenses/>.
 #
-# $Id: 00_MYSENSORS.pm 20188 2019-09-18 14:21:36Z Beta-User $
+# $Id: 00_MYSENSORS.pm 21300 2020-02-28 07:24:35Z Beta-User $
 #
 ##############################################
 
@@ -423,6 +423,11 @@ sub onInternalMsg($$) {
         }
         last;
       };
+      $type == I_TIME and do {
+        if (my $client = matchClient($hash,$msg)){ MYSENSORS::DEVICE::onInternalMessage($client,$msg) }
+        last;
+      };
+
     }
   } elsif (my $client = matchClient($hash,$msg)) {
     MYSENSORS::DEVICE::onInternalMessage($client,$msg);

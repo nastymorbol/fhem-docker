@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 00_MQTT2_SERVER.pm 20451 2019-11-04 10:37:40Z rudolfkoenig $
+# $Id: 00_MQTT2_SERVER.pm 21339 2020-03-02 19:10:38Z rudolfkoenig $
 package main;
 
 # TODO: test SSL
@@ -51,7 +51,7 @@ MQTT2_SERVER_Initialize($)
     sslCertPrefix
   );
   use warnings 'qw';
-  $hash->{AttrList} = join(" ", @attrList);
+  $hash->{AttrList} = join(" ", @attrList)." ".$readingFnAttributes;
 }
 
 #####################################
@@ -137,7 +137,7 @@ MQTT2_SERVER_Attr(@)
   my ($type, $devName, $attrName, @param) = @_;
   my $hash = $defs{$devName};
   if($type eq "set" && $attrName eq "SSL") {
-    TcpServer_SetSSL($hash);
+    InternalTimer(1, "TcpServer_SetSSL", $hash, 0); # Wait for sslCertPrefix
   }
   return undef;
 } 
@@ -162,6 +162,7 @@ MQTT2_SERVER_Set($@)
     return "Usage: publish -r topic [value]" if(@a < 1);
     my $tp = shift(@a);
     my $val = join(" ", @a);
+    readingsSingleUpdate($hash, "lastPublish", "$tp:$val", 1);
     MQTT2_SERVER_doPublish($hash->{CL}, $hash, $tp, $val, $retain);
   }
 }
@@ -440,8 +441,7 @@ MQTT2_SERVER_doPublish($$$$;$)
   }
 
   foreach my $clName (keys %{$server->{clients}}) {
-    MQTT2_SERVER_sendto($server, $defs{$clName}, $tp, $val)
-        if($src->{NAME} ne $clName);
+    MQTT2_SERVER_sendto($server, $defs{$clName}, $tp, $val);
   }
 
   my $serverName = $server->{NAME};
@@ -565,7 +565,6 @@ MQTT2_SERVER_ReadDebug($$)
 1;
 
 =pod
-=item helper
 =item summary    Standalone MQTT message broker
 =item summary_DE Standalone MQTT message broker
 =begin html
@@ -660,7 +659,7 @@ MQTT2_SERVER_ReadDebug($$)
 
     <a name="SSL"></a>
     <li>SSL<br>
-      Enable SSL (i.e. TLS)
+      Enable SSL (i.e. TLS).
       </li><br>
 
     <li>sslVersion<br>

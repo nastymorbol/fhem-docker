@@ -1,6 +1,6 @@
 
 
-# $Id: 31_HUEDevice.pm 21039 2020-01-23 13:02:06Z justme1968 $
+# $Id: 31_HUEDevice.pm 21480 2020-03-22 10:06:36Z justme1968 $
 
 # "Hue Personal Wireless Lighting" is a trademark owned by Koninklijke Philips Electronics N.V.,
 # see www.meethue.com for more information.
@@ -1385,7 +1385,6 @@ HUEDevice_Parse($$)
   $hash->{helper}{json} = $result;
 
   if( $hash->{helper}->{devtype} eq 'G' ) {
-
     #if( !defined($attr{$name}{subType}) && $hash->{type} ) {
     #  if( $hash->{type} eq 'Room' ) {
     #    $attr{$name}{subType} = 'room';
@@ -1497,6 +1496,8 @@ HUEDevice_Parse($$)
   }
 
   $hash->{modelid} = $result->{modelid} if( defined($result->{modelid}) );
+  $attr{$name}{model} = $result->{modelid} if( !defined($attr{$name}{model}) && $result->{modelid} );
+
   $hash->{productid} = $result->{productid} if( defined($result->{productid}) );
   $hash->{swversion} = $result->{swversion} if( defined($result->{swversion}) );
   $hash->{swconfigid} = $result->{swconfigid} if( defined($result->{swconfigid}) );
@@ -1523,6 +1524,8 @@ HUEDevice_Parse($$)
       $hash->{sensitivity} = $config->{sensitivity} if( defined($config->{sensitivity}) );
 
       $readings{battery} = $config->{battery} if( defined($config->{battery}) );
+      $readings{batteryPercent} = $config->{battery} if( defined($config->{battery}) );
+
       $readings{reachable} = $config->{reachable} if( defined($config->{reachable}) );
       $readings{temperature} = $config->{temperature} * 0.01 if( defined($config->{temperature}) );
 
@@ -1596,6 +1599,7 @@ HUEDevice_Parse($$)
       $readings{fire} = $state->{fire} if( defined($state->{fire}) );
       $readings{tampered} = $state->{tampered} if( defined($state->{tampered}) );
       $readings{battery} = $state->{battery} if( defined($state->{battery}) );
+      $readings{batteryPercent} = $state->{battery} if( defined($state->{battery}) );
       $readings{batteryState} = $state->{lowbattery}?'low':'ok' if( defined($state->{lowbattery}) );
 
       #Xiaomi Aqara Vibrationsensor (lumi.vibration.aq1)
@@ -1606,10 +1610,13 @@ HUEDevice_Parse($$)
 
       #Eurotronic Spirit ZigBee (SPZB0001)
       $readings{valve} = ceil((100/255) * $state->{valve}) if( defined ($state->{valve}) );
+
+      #Heiman Gassensor HS1CG
+      $readings{carbonmonoxide} = $state->{carbonmonoxide} if( defined($state->{carbonmonoxide}) );
     }
 
-    $hash->{lastupdated} = ReadingsVal( $name, '.lastupdated', undef ) if( !$hash->{lastupdated} );
-    $hash->{lastupdated_local} = ReadingsVal( $name, '.lastupdated_local', undef ) if( !$hash->{lastupdated_local} );
+    $hash->{lastupdated} = ReadingsVal( $name, '.lastupdated', '' ) if( !$hash->{lastupdated} );
+    $hash->{lastupdated_local} = ReadingsVal( $name, '.lastupdated_local', '' ) if( !$hash->{lastupdated_local} );
     return undef if( $hash->{lastupdated}
                      && $hash->{lastupdated} eq $lastupdated
                      && (!$readings{state} || $readings{state} eq ReadingsVal( $name, 'state', '' ))  );
@@ -1654,8 +1661,6 @@ HUEDevice_Parse($$)
     return undef;
   }
 
-
-  $attr{$name}{model} = $result->{modelid} if( !defined($attr{$name}{model}) && $result->{modelid} );
 
   if( !defined($attr{$name}{subType}) ) {
     if( defined($attr{$name}{model}) ) {
@@ -1770,6 +1775,7 @@ HUEDevice_Parse($$)
   if( defined($rgb) && $rgb ne $hash->{helper}{rgb} ) {readingsBulkUpdate($hash,"rgb",$rgb);}
 
   if( defined($battery) && $battery ne $hash->{helper}{battery} ) {readingsBulkUpdate($hash,"battery",$battery);}
+  if( defined($battery) && $battery ne $hash->{helper}{battery} ) {readingsBulkUpdate($hash,'batteryPercent',$battery);}
 
   if( defined($mode) && $mode ne $hash->{helper}{mode} ) {readingsBulkUpdate($hash,"mode",$mode);}
 
