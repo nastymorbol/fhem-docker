@@ -1,9 +1,10 @@
 ##############################################
-# $Id: 98_autocreate.pm 20791 2019-12-20 17:30:57Z rudolfkoenig $
+# $Id: 98_autocreate.pm 21659 2020-04-13 10:08:36Z rudolfkoenig $
 package main;
 
 use strict;
 use warnings;
+use DevIo;
 sub resolveSymLink($);
 
 # Problems:
@@ -565,8 +566,6 @@ CommandUsb($$)
   if($^O =~ m/Win/) {
     return "This command is not yet supported on windows";
   }
-
-  require "$attr{global}{modpath}/FHEM/DevIo.pm";
 
   Log3 undef, 1, "usb $n starting";
   ################

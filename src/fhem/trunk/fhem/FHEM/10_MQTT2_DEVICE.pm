@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 10_MQTT2_DEVICE.pm 20964 2020-01-13 17:02:05Z rudolfkoenig $
+# $Id: 10_MQTT2_DEVICE.pm 21915 2020-05-11 19:21:22Z rudolfkoenig $
 package main;
 
 use strict;
@@ -168,7 +168,7 @@ MQTT2_DEVICE_Parse($$)
           if($ret && ref $ret eq "HASH") {
             readingsBeginUpdate($hash);
             foreach my $k (keys %{$ret}) {
-              readingsBulkUpdate($hash, $k, $ret->{$k});
+              readingsBulkUpdate($hash, makeReadingName($k), $ret->{$k});
               my $msg = ($ret->{$k} ? $ret->{$k} : "");
               push(@retData, "$k $msg");
               checkForGet($hash, $k, $ret->{$k});
@@ -190,7 +190,7 @@ MQTT2_DEVICE_Parse($$)
   #################################################
   # IODevs autocreate and/or expand readingList
   if($autocreate ne "no" && !%fnd) {
-    return "" if($cid && $cid =~ m/mosqpub.*/);
+    return "" if($cid && $cid =~ m/^(mosqpub|mosq_)/); # mosquitto_pub default
 
     ################## bridge stuff
     my $newCid = $cid;

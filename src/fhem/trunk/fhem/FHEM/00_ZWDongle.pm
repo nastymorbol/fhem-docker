@@ -1,10 +1,11 @@
 ##############################################
-# $Id: 00_ZWDongle.pm 20092 2019-09-02 07:10:12Z rudolfkoenig $
+# $Id: 00_ZWDongle.pm 21865 2020-05-04 17:40:01Z rudolfkoenig $
 package main;
 
 use strict;
 use warnings;
 use Time::HiRes qw(gettimeofday);
+use DevIo;
 use ZWLib;
 use vars qw($FW_ME);
 
@@ -80,8 +81,6 @@ sub
 ZWDongle_Initialize($)
 {
   my ($hash) = @_;
-
-  require "$attr{global}{modpath}/FHEM/DevIo.pm";
 
 # Provider
   $hash->{ReadFn}  = "ZWDongle_Read";
@@ -390,7 +389,7 @@ ZWDongle_Set($@)
       $_ =~ s/^UNKNOWN_//;
       $_ = hex($defs{$_}{nodeIdHex})
         if($defs{$_} && $defs{$_}{nodeIdHex});
-      return "$_ is neither a device nor a decimal id" if($_ !~ m/\d+/);
+      return "$_ is neither a device nor a decimal id" if($_ !~ m/^\d+$/);
     }
   }
 
@@ -472,6 +471,7 @@ ZWDongle_Get($@)
 
     $a[0] = hex($defs{$a[0]}{nodeIdHex})
      if($defs{$a[0]} && $defs{$a[0]}{nodeIdHex});
+    return "$a[0] is neither a device nor a decimal id" if($a[0] !~ m/^\d+$/);
   }
 
   my $out = sprintf($gets{$cmd}, @a);

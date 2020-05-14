@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 98_telnet.pm 17529 2018-10-14 12:57:06Z rudolfkoenig $
+# $Id: 98_telnet.pm 21647 2020-04-12 12:13:17Z rudolfkoenig $
 
 # Note: this is not really a telnet server, but a TCP server with slight telnet
 # features (disable echo on password)
@@ -258,8 +258,11 @@ telnet_Read($)
     } else {
       $hash->{showPrompt} = 1;                  # Empty return
       if(!$hash->{motdDisplayed}) {
-        my $motd = $attr{global}{motd};
-        push @ret, $motd if($motd && $motd ne "none");
+        my $motd = AttrVal("global", "motd", "");
+        my $gie = $defs{global}{init_errors};
+        if($motd ne "none" && ($motd || $gie)) {
+          push @ret, "$motd\n$gie";
+        }
         $hash->{motdDisplayed} = 1;
       }
     }

@@ -1,4 +1,4 @@
-# $Id: 57_Calendar.pm 20528 2019-11-17 16:07:12Z neubert $
+# $Id: 57_Calendar.pm 21910 2020-05-10 12:22:05Z neubert $
 ##############################################################################
 #
 #     57_Calendar.pm
@@ -1702,6 +1702,7 @@ sub Calendar_Initialize($) {
   $hash->{NotifyFn}= "Calendar_Notify";
   $hash->{AttrList}=  "update:none,onUrlChanged ".
                       "synchronousUpdate:0,1 ".
+                      "delay " .
                       "removevcalendar:0,1 " .
                       "ignoreCancelled:0,1 ".
                       "SSLVerify:0,1 ".
@@ -1825,10 +1826,7 @@ sub Calendar_Notify($$)
   # update calendar after initialization or change of configuration
   # wait 10 to 29 seconds to avoid congestion due to concurrent activities
   Calendar_DisarmTimer($hash);
-  my $delay= 10+int(rand(20));
-
-  # delay removed until further notice
-  $delay= 2;
+  my $delay= AttrVal($name, "delay", 10+int(rand(20)));
 
   Log3 $hash, 5, "Calendar $name: FHEM initialization or rereadcfg triggered update, delay $delay seconds.";
   InternalTimer(time()+$delay, "Calendar_Wakeup", $hash, 0) ;
@@ -3660,6 +3658,13 @@ sub CalendarEventsAsHtml($;$) {
         If this attribute is set to <code>none</code>, the calendar will not be updated at all.
         </li><p>
 
+    <li><code>delay &lt;time&gt;</code><br>
+        The waiting time in seconds after the initialization of FHEM or a configuration change before 
+        actually retrieving the calendar from its source. If not set, a random time between 10 and 29 
+        seconds is chosen. When several calendar devices are defined, staggered delays reduce
+        load error rates.
+        </li><p>
+
     <li><code>removevcalendar 0|1</code><br>
         If this attribute is set to 1, the vCalendar will be discarded after the processing to reduce the memory consumption of the module.
         A retrieval via <code>get &lt;name&gt; vcalendar</code> is then no longer possible.
@@ -4263,7 +4268,7 @@ sub CalendarEventsAsHtml($;$) {
   <br>
 
   <a name="Calendarattr"></a>
-  <b>Attributes</b>
+  <b>Attribute</b>
   <br><br>
   <ul>
     <li><code>defaultFormat &lt;formatSpec&gt;</code><br>
@@ -4289,6 +4294,13 @@ sub CalendarEventsAsHtml($;$) {
         Wird dieses Attribut auf <code>none</code> gesetzt ist, wird der Kalender &uuml;berhaupt nicht aktualisiert.<br/>
         Wird dieses Attribut auf <code>onUrlChanged</code> gesetzt ist, wird der Kalender nur dann aktualisiert, wenn sich die
         URL seit dem letzten Aufruf ver&auml;ndert hat, insbesondere nach der Auswertung von wildcards im define.<br/>
+        </li><p>
+
+    <li><code>delay &lt;time&gt;</code><br>
+        Wartezeit in Sekunden nach der Initialisierung von FHEM oder einer Konfigurations&auml;nderung bevor
+        der Kalender tats&auml;chlich von der Quelle geladen wird. Wenn nicht gesetzt wird eine
+        Zufallszeit zwischen 10 und 29 Sekunden gew&auml;hlt. Wenn mehrere Kalender definiert sind, f&uuml;hren
+        gestaffelte Wartezeiten zu einer Verminderung der Ladefehleranf&auml;lligkeit.
         </li><p>
 
     <li><code>removevcalendar 0|1</code><br>

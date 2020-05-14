@@ -1,4 +1,4 @@
-# $Id: configDB.pm 20123 2019-09-07 17:51:10Z betateilchen $
+# $Id: configDB.pm 21888 2020-05-07 07:44:33Z betateilchen $
 
 =for comment
 
@@ -647,7 +647,7 @@ sub cfgDB_MigrationImport() {
 
 # return SVN Id, called by fhem's CommandVersion
 sub cfgDB_svnId() { 
-	return "# ".'$Id: configDB.pm 20123 2019-09-07 17:51:10Z betateilchen $' 
+	return "# ".'$Id: configDB.pm 21888 2020-05-07 07:44:33Z betateilchen $' 
 }
 
 # return filelist depending on directory and regexp
@@ -1181,7 +1181,7 @@ sub _cfgDB_Fileexport($;$) {
 	my $sth      = $fhem_dbh->prepare( "SELECT content FROM fhemb64filesave WHERE filename = '$filename'" );  
 	$sth->execute();
 	my $blobContent = $sth->fetchrow_array();
-    $blobContent = decode_base64($blobContent);
+    $blobContent = decode_base64($blobContent) if($blobContent);
 	my $counter = length($blobContent);
 	$sth->finish();
 	$fhem_dbh->disconnect();

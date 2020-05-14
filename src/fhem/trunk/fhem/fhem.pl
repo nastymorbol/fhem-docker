@@ -27,7 +27,7 @@
 #
 #  Homepage:  http://fhem.de
 #
-# $Id: fhem.pl 21056 2020-01-26 13:01:53Z rudolfkoenig $
+# $Id: fhem.pl 21926 2020-05-13 10:27:43Z rudolfkoenig $
 
 
 use strict;
@@ -127,6 +127,7 @@ sub devspec2array($;$$);
 sub doGlobalDef($);
 sub escapeLogLine($);
 sub evalStateFormat($);
+sub execFhemTestFile();
 sub fhem($@);
 sub fhemTimeGm($$$$$$);
 sub fhemTimeLocal($$$$$$);
@@ -142,6 +143,8 @@ sub latin1ToUtf8($);
 sub myrename($$$);
 sub notifyRegexpChanged($$);
 sub parseParams($;$$$);
+sub prepareFhemTestFile();
+sub execFhemTestFile();
 sub perlSyntaxCheck($%);
 sub readingsBeginUpdate($);
 sub readingsBulkUpdate($$$@);
@@ -240,6 +243,7 @@ use vars qw($cvsid);            # used in 98_version.pm
 use vars qw($devcount);         # Maximum device number, used for storing
 use vars qw($featurelevel); 
 use vars qw($fhemForked);       # 1 in a fhemFork()'ed process, else undef
+use vars qw($fhemTestFile);     # file to include if -t is specified
 use vars qw($fhem_started);     # used for uptime calculation
 use vars qw($haveInet6);        # Using INET6
 use vars qw($init_done);        #
@@ -280,7 +284,7 @@ use constant {
 };
 
 $selectTimestamp = gettimeofday();
-$cvsid = '$Id: fhem.pl 21056 2020-01-26 13:01:53Z rudolfkoenig $';
+$cvsid = '$Id: fhem.pl 21926 2020-05-13 10:27:43Z rudolfkoenig $';
 
 my $AttrList = "alias comment:textField-long eventMap:textField-long ".
                "group room suppressReading userReadings:textField-long ".
@@ -329,7 +333,7 @@ my @globalAttrList = qw(
   blockingCallMax
   commandref:modular,full
   configfile
-  disableFeatures:multiple,attrTemplate
+  disableFeatures:multiple-strict,attrTemplate,securityCheck
   dnsHostsFile
   dnsServer
   dupTimeout
@@ -476,14 +480,16 @@ my %ra = (
 # Start the program
 my $fhemdebug;
 $fhemdebug = shift @ARGV if($ARGV[0] eq "-d");
+prepareFhemTestFile();
 
 if(int(@ARGV) < 1) {
   print "Usage:\n";
-  print "as server: fhem configfile\n";
-  print "as client: fhem [host:]port cmd cmd cmd...\n";
+  print "as server: perl fhem.pl [-d] {<configfile>|configDb}\n";
+  print "as client: perl fhem.pl [host:]port cmd cmd cmd...\n";
+  print "testing:   perl fhem.pl -t <testfile>.t\n";
   if($^O =~ m/Win/) {
-    print "install as windows service: fhem.pl configfile -i\n";
-    print "uninstall the windows service: fhem.pl -u\n";
+    print "install as windows service: perl fhem.pl configfile -i\n";
+    print "uninstall the windows service: perl fhem.pl -u\n";
   }
   exit(1);
 }
@@ -567,8 +573,9 @@ if(configDBUsed()) {
 
 
 # As newer Linux versions reset serial parameters after fork, we parse the
-# config file after the fork. But we need some global attr parameters before, so we
-# read them here.
+# config file after the fork. But we need some global attr parameters before,
+# so we read them here. FHEM_GLOBALATTR is for docker, as it needs to overwrite
+# fhem.cfg
 my (undef, $globalAttrFromEnv) = parseParams($ENV{FHEM_GLOBALATTR});
 setGlobalAttrBeforeFork($attr{global}{configfile});
 applyGlobalAttrFromEnv();
@@ -598,15 +605,14 @@ if(gettimeofday() < 2*3600) {
 require RTypes;
 RTypes_Initialize();
 
-my $cfgErrMsg = "Messages collected while initializing FHEM:";
-my $cfgRet="";
+$defs{global}{init_errors}="";
 if(configDBUsed()) {
   my $ret = cfgDB_ReadAll(undef);
-  $cfgRet .= "configDB: $ret\n" if($ret);
+  $defs{global}{init_errors} .= "configDB: $ret\n" if($ret);
 
 } else {
   my $ret = CommandInclude(undef, $attr{global}{configfile});
-  $cfgRet .= "configfile: $ret\n" if($ret);
+  $defs{global}{init_errors} .= "configfile: $ret\n" if($ret);
 
   my $stateFile = $attr{global}{statefile};
   if($stateFile) {
@@ -614,7 +620,7 @@ if(configDBUsed()) {
     $stateFile = ResolveDateWildcards($stateFile, @t);
     if(-r $stateFile) {
       $ret = CommandInclude(undef, $stateFile);
-      $cfgRet .= "$stateFile: $ret\n" if($ret);
+      $defs{global}{init_errors} .= "$stateFile: $ret\n" if($ret);
     }
   }
 }
@@ -642,17 +648,14 @@ foreach my $d (keys %defs) {
   }
 }
 
-if($cfgRet) {
-  $attr{global}{autosave} = 0;
-  $attr{global}{motd} = "$cfgErrMsg\n$cfgRet\nAutosave deactivated";
-  Log 1, $cfgRet;
-
-} elsif($attr{global}{motd} && $attr{global}{motd} =~ m/^$cfgErrMsg/) {
-  $attr{global}{motd} = "";
-
-} else {
-  SecurityCheck();
-
+my $init_errors_first = ($defs{global}{init_errors} ? 1 : 0);
+SecurityCheck();
+if($defs{global}{init_errors}) {
+  $attr{global}{autosave} = 0 if($init_errors_first);
+  $defs{global}{init_errors} = "Messages collected while initializing FHEM:".
+                 "$defs{global}{init_errors}\n".
+                 ($init_errors_first ? "Autosave deactivated" : "");
+  Log 1, $defs{global}{init_errors} if(AttrVal("global","motd","") ne "none");
 }
 
 
@@ -663,6 +666,7 @@ my $osuser = "os:$^O user:".(getlogin || getpwuid($<) || "unknown");
 Log 0, "Featurelevel: $featurelevel";
 Log 0, "Server started with ".int(keys %defs).
         " defined entities ($attr{global}{version} perl:$] $osuser pid:$$)";
+execFhemTestFile();
 
 ################################################
 # Main Loop
@@ -992,7 +996,7 @@ Log3($$$)
 
   no strict "refs";
   foreach my $li (keys %logInform) {
-    if($defs{$li}) {
+    if($defs{$li}) {    # Function wont be called for WARNING, don't know why
       &{$logInform{$li}}($li, "$tim $loglevel : $text");
     } else {
       delete $logInform{$li};
@@ -2415,7 +2419,13 @@ CommandSetReading($$)
     my $b1 = $b[1];
     return "bad reading name $b1 (contains not A-Za-z/\\d_\\.- or is too long)"
       if(!goodReadingName($b1));
-    readingsSingleUpdate($defs{$sdev}, $b1, $b[2], 1);
+
+    if($hash->{".updateTime"}) { # Called from userReadings, #110375
+      Log 1, "'setreading $def' called form userReadings is prohibited";
+      return;
+    } else {
+      readingsSingleUpdate($hash, $b1, $b[2], 1);
+    }
   }
   return join("\n", @rets);
 }
@@ -4364,6 +4374,7 @@ setGlobalAttrBeforeFork($)
     next if($l !~ m/^attr\s+global\s+([^\s]+)\s+(.*)$/);
     AnalyzeCommand(undef, $l);
   }
+  CommandAttr(undef, "global modpath .") if(!AttrVal("global","modpath",""));
 }
 
 sub
@@ -5505,14 +5516,13 @@ setKeyValue($$)
 sub
 addStructChange($$$)
 {
-  return if(!$init_done);
-
   my ($cmd, $dev, $param) = @_;
-  return if(!$defs{$dev} || $defs{$dev}{TEMPORARY});
+
+  return if(!$init_done);
+  return if(defined($dev) &&
+            (!$defs{$dev} || $defs{$dev}{TEMPORARY} || $defs{$dev}{VOLATILE}));
 
   $lastDefChange++;
-  return if($defs{$dev}{VOLATILE});
-
   shift @structChangeHist
           if(@structChangeHist > AttrVal('global', 'maxChangeLog', 10) - 1);
   $param = substr($param, 0, 40)."..." if(length($param) > 40);
@@ -5539,7 +5549,7 @@ fhemFork()
       if($h->{DBH} && $h->{TYPE} eq 'DbLog'); #Forum #43271
     TcpServer_Close($h) if($h->{SERVERSOCKET});
     if($h->{DeviceName}) {
-      require "$attr{global}{modpath}/FHEM/DevIo.pm";
+      require "DevIo.pm";
       DevIo_CloseDev($h,1);
     }
   }
@@ -5779,7 +5789,8 @@ goodReadingName($)
 {
   my ($name) = @_;
   return undef if(!$name);
-  return ($name =~ m/^[a-z0-9._\-\/]+$/i || $name =~ m/^\./);
+  return ($name =~ m/^[a-z0-9._\-\/]+$/i || 
+          $name =~ m/^\.[^\s]*$/);
 }
 
 sub
@@ -5787,7 +5798,10 @@ makeReadingName($) # Convert non-valid characters to _
 {
   my ($name) = @_;
   $name = "UNDEFINED" if(!defined($name));
-  return $name if($name =~ m/^\./);
+  if($name =~ m/^\./) {
+    $name =~ s/\s/_/g;
+    return $name;
+  }
   $name =~ s/[^a-z0-9._\-\/]/_/gi;
   return $name;
 }
@@ -5911,6 +5925,11 @@ restoreDir_saveFile($$)
 
   return if(!$restoreDir || !$fName);
 
+  if($^O eq "MSWin32") { # Forum #110071
+    $fName =~ s,^.:,,g;
+    $fName =~ s,\\,/,g;
+  }
+
   my $root = $attr{global}{modpath};
   restoreDir_mkDir($root, "$restoreDir/$fName", 1);
   if(!copy($fName, "$root/$restoreDir/$fName")) {
@@ -5921,8 +5940,8 @@ restoreDir_saveFile($$)
 sub
 SecurityCheck()
 {
-  return if(AttrVal("global", "motd", "") eq "none");
   my @fnd;
+  return if(AttrVal("global", "disableFeatures", "") =~ m/\bsecurityCheck\b/i);
   foreach my $sdev (keys %defs) {
     next if($defs{$sdev}{TEMPORARY});
     my $type = $defs{$sdev}{TYPE};
@@ -5950,9 +5969,8 @@ SecurityCheck()
   if(@fnd) {
     unshift(@fnd, "SecurityCheck:");
     push(@fnd, "You can disable this message with attr global motd none");
-    $attr{global}{motd} = join("\n", @fnd);
-  } elsif(AttrVal('global','motd','') =~ m/^SecurityCheck/) {
-    delete $attr{global}{motd};
+    $defs{global}{init_errors}  =~ s/SecurityCheck:.*motd none//s;
+    $defs{global}{init_errors} .= join("\n", @fnd);
   }
 }
 
@@ -6009,6 +6027,31 @@ applyGlobalAttrFromEnv()
     Log 3, "From the FHEM_GLOBALATTR environment: attr global $k $v";
     CommandAttr(undef, "global $k $v");
   }
+}
+
+# set the test config file: either the corresponding X.cfg, or fhem.cfg
+sub
+prepareFhemTestFile()
+{
+  return if($ARGV[0] ne "-t" || @ARGV < 2);
+  shift @ARGV;
+
+  return if($ARGV[0] !~ m,^(.*?)([^/]+)\.t$,);
+  my ($dir, $fileBase) = ($1, $2);
+
+  $fhemTestFile = $ARGV[0];
+  $ARGV[0] = "${dir}fhem.cfg"    if(-r "${dir}fhem.cfg");
+  $ARGV[0] = "$dir$fileBase.cfg" if(-r "$dir$fileBase.cfg");
+}
+
+sub
+execFhemTestFile()
+{
+  return if(!$fhemTestFile);
+  $attr{global}{autosave} = 0;
+  AnalyzeCommand(undef, "define .ftu FhemTestUtils")
+    if(!grep { $defs{$_}{TYPE} eq "FhemTestUtils" } keys %defs);
+  InternalTimer(1, sub { require $fhemTestFile }, 0 ) if($fhemTestFile);
 }
 
 1;

@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 99_Utils.pm 21001 2020-01-17 13:19:57Z rudolfkoenig $
+# $Id: 99_Utils.pm 21768 2020-04-24 14:22:12Z rudolfkoenig $
 package main;
 
 use strict;
@@ -16,13 +16,9 @@ time_str2num($)
 {
   my ($str) = @_;
   my @a;
-  if($str) {
-    @a = split("[T: -]", $str);
-    return mktime($a[5],$a[4],$a[3],$a[2],$a[1]-1,$a[0]-1900,0,0,-1);
-  } else {
-    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
-    return mktime($sec, $min, $hour, $mday, $mon, $year, 0, 0, -1);
-  }
+  return time() if(!$str);
+  @a = split("[T: -]", $str); # 31652, 110545, 
+  return mktime($a[5],$a[4],$a[3],$a[2],$a[1]-1,$a[0]-1900,0,0,-1);
 }
 
 sub

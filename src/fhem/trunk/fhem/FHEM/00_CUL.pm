@@ -1,9 +1,10 @@
 ##############################################
-# $Id: 00_CUL.pm 20874 2020-01-04 10:47:06Z rudolfkoenig $
+# $Id: 00_CUL.pm 21659 2020-04-13 10:08:36Z rudolfkoenig $
 package main;
 
 use strict;
 use warnings;
+use DevIo;
 use Time::HiRes qw(gettimeofday);
 
 sub CUL_Attr(@);
@@ -125,8 +126,6 @@ sub
 CUL_Initialize($)
 {
   my ($hash) = @_;
-
-  require "$attr{global}{modpath}/FHEM/DevIo.pm";
 
 # Provider
   $hash->{ReadFn}  = "CUL_Read";

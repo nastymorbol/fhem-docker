@@ -1631,6 +1631,18 @@ Die folgenden lokalen Attribute werden von mehreren Ger&auml;ten verwendet:
         IPv4 unterst&uuml;tzt.
     </li><br>
 
+    <a name="globaldisableFeatures"></a>
+    <li>disableFeatures <values><br>
+        Komma separierte Liste von Werten. Z.Zt. werden Folgende erkannt:
+        <ul>
+          <li>attrTemplate: um das Laden der AttrTemplates zu vermeiden.
+            </li>
+          <li>securityCheck: um bei fehlenden Benutzer/Passwort bei den
+            aktivierten Netzwerk-Server keine Warnmeldung zu generieren.
+            </li><br>
+        </ul>
+        </li>
+
     <a name="dnsServer"></a>
     <li>dnsServer<br>
         Enth&auml;lt die IP Adresse des DNS Servers. Die von bestimmten Modulen
@@ -2013,8 +2025,7 @@ Die folgenden lokalen Attribute werden von mehreren Ger&auml;ten verwendet:
     <br>
     <ul>
       <li>Value(&lt;devicename&gt;)<br>
-        gibt den Status eines Ger&auml;tes zur&uuml;ck (entsprechend dem
-        Ausdruck in Klammern, den Sie beim List-Befehl sehen).
+        liefert das Internal STATE zur&uuml;ck.
         </li><br>
 
       <li>OldValue(&lt;devicename&gt;)</li>

@@ -1,4 +1,4 @@
-# $Id: 70_BOTVAC.pm 20276 2019-09-29 16:07:12Z vuffiraa $
+# $Id: 70_BOTVAC.pm 21819 2020-04-30 17:29:42Z vuffiraa $
 ##############################################################################
 #
 #     70_BOTVAC.pm
@@ -24,31 +24,7 @@
 #
 ##############################################################################
 
-package main;
-
-use strict;
-use warnings;
-
-
-sub BOTVAC_Initialize($) {
-    my ($hash) = @_;
-    our $readingFnAttributes;
-
-    $hash->{DefFn}    = "BOTVAC::Define";
-    $hash->{GetFn}    = "BOTVAC::Get";
-    $hash->{SetFn}    = "BOTVAC::Set";
-    $hash->{UndefFn}  = "BOTVAC::Undefine";
-    $hash->{DeleteFn} = "BOTVAC::Delete";
-    $hash->{ReadFn}   = "BOTVAC::wsRead";
-    $hash->{ReadyFn}  = "BOTVAC::wsReady";
-    $hash->{AttrFn}   = "BOTVAC::Attr";
-    $hash->{AttrList} = "disable:0,1 " .
-                        "actionInterval " .
-                        "boundaries:textField-long " .
-                         $readingFnAttributes;
-}
-
-package BOTVAC;
+package FHEM::BOTVAC;
 
 use strict;
 use warnings;
@@ -57,41 +33,55 @@ use POSIX;
 use GPUtils qw(:all);  # wird für den Import der FHEM Funktionen aus der fhem.pl benötigt
 
 use Time::HiRes qw(gettimeofday);
+use Time::Local qw(timelocal);
 use JSON qw(decode_json encode_json);
-#use IO::Socket::SSL::Utils qw(PEM_string2cert);
 use Digest::SHA qw(hmac_sha256_hex sha1_hex);
 use Encode qw(encode_utf8);
 use MIME::Base64;
 
-require "DevIo.pm";
-require "HttpUtils.pm";
+require DevIo;
+require HttpUtils;
 
 ## Import der FHEM Funktionen
 BEGIN {
     GP_Import(qw(
-        AttrVal
-        createUniqueId
-        FmtDateTime
-        FmtDateTimeRFC1123
-        fhemTzOffset
-        getKeyValue
-        setKeyValue
-        getUniqueId
-        InternalTimer
-        InternalVal
-        readingsSingleUpdate
-        readingsBulkUpdate
-        readingsBulkUpdateIfChanged
-        readingsBeginUpdate
-        readingsDelete
-        readingsEndUpdate
-        ReadingsNum
-        ReadingsVal
-        RemoveInternalTimer
-        Log3
-        trim
-    ))
-};
+      AttrVal
+      CommandAttr
+      createUniqueId
+      fhemTzOffset
+      FmtDateTime
+      FmtDateTimeRFC1123
+      getKeyValue
+      getUniqueId
+      InternalTimer
+      InternalVal
+      Log3
+      readingFnAttributes
+      readingsBeginUpdate
+      readingsBulkUpdate
+      readingsBulkUpdateIfChanged
+      readingsDelete
+      readingsEndUpdate
+      ReadingsNum
+      readingsSingleUpdate
+      ReadingsVal
+      RemoveInternalTimer
+      setKeyValue
+      trim
+    ));
+}
+
+GP_Export(
+    qw(
+      Initialize
+    )
+);
+
+my $useDigestMD5 = 0;
+if ( eval { require Digest::MD5; 1 } ) {
+  $useDigestMD5 = 1;
+  Digest::MD5->import();
+}
 
 my %opcode = (    # Opcode interpretation of the ws "Payload data
   'continuation'  => 0x00,
@@ -103,7 +93,28 @@ my %opcode = (    # Opcode interpretation of the ws "Payload data
 );
 
 ###################################
-sub Define($$) {
+sub Initialize {
+    my ($hash) = @_;
+
+    $hash->{DefFn}    = \&Define;
+    $hash->{GetFn}    = \&Get;
+    $hash->{SetFn}    = \&Set;
+    $hash->{UndefFn}  = \&Undefine;
+    $hash->{DeleteFn} = \&Delete;
+    $hash->{ReadFn}   = \&wsRead;
+    $hash->{ReadyFn}  = \&wsReady;
+    $hash->{AttrFn}   = \&Attr;
+    $hash->{AttrList} = "disable:0,1 " .
+                        "actionInterval " .
+                        "boundaries:textField-long " .
+                        "sslVerify:0,1 " .
+                         $readingFnAttributes;
+
+    return;
+}
+
+###################################
+sub Define {
     my ( $hash, $def ) = @_;
     my @a = split( "[ \t][ \t]*", $def );
     my $name = $hash->{NAME};
@@ -147,22 +158,20 @@ sub Define($$) {
     $hash->{VENDOR} = $vendor;
     $hash->{INTERVAL} = $interval;
 
-    unless ( defined( AttrVal( $name, "webCmd", undef ) ) ) {
-      no warnings "once";
-      $::attr{$name}{webCmd} = 'startCleaning:stop:sendToBase';
-    }
+    CommandAttr($hash, "$name webCmd startCleaning:stop:sendToBase")
+        if (AttrVal( $name, 'webCmd', 'none' ) eq 'none');
 
     # start the status update timer
     RemoveInternalTimer($hash);
-    InternalTimer( gettimeofday() + 2, "BOTVAC::GetStatus", $hash, 1 );
+    InternalTimer( gettimeofday() + 2, \&GetStatus, $hash, 1 );
 
-    AddExtension($name, "BOTVAC::GetMap", "BOTVAC/$name/map");
+    AddExtension($name, \&GetMap, "BOTVAC/$name/map");
 
     return;
 }
 
 #####################################
-sub GetStatus($;$) {
+sub GetStatus {
     my ( $hash, $update ) = @_;
     my $name      = $hash->{NAME};
     my $interval  = $hash->{INTERVAL};
@@ -171,10 +180,10 @@ sub GetStatus($;$) {
     Log3($name, 5, "BOTVAC $name: called function GetStatus()");
 
     # use actionInterval if state is busy or paused
-    $interval = AttrVal($name, "actionInterval", $interval) if (ReadingsVal($name, "stateId", "0") =~ /2|3/);
+    $interval = AttrVal($name, "actionInterval", $interval) if (ReadingsVal($name, "stateId", "0") =~ /2|3/x);
 
     RemoveInternalTimer($hash);
-    InternalTimer( gettimeofday() + $interval, "BOTVAC::GetStatus", $hash, 0 );
+    InternalTimer( gettimeofday() + $interval, \&GetStatus, $hash, 0 );
 
     return if ( AttrVal($name, "disable", 0) == 1 or ReadingsVal($name,"pollingMode",1) == 0);
 
@@ -187,8 +196,8 @@ sub GetStatus($;$) {
       push(@successor, ["dashboard", undef]) if ($secs <= $interval);
 
       push(@successor, ["messages", "getSchedule"]);
-      push(@successor, ["messages", "getGeneralInfo"]) if (GetServiceVersion($hash, "generalInfo") =~ /.*-1/);
-      push(@successor, ["messages", "getPreferences"]) if (GetServiceVersion($hash, "preferences") ne "");
+      push(@successor, ["messages", "getGeneralInfo"]) if (GetServiceVersion($hash, "generalInfo") =~ /.*-1/x);
+      push(@successor, ["messages", "getPreferences"]) if (GetServiceVersion($hash, "preferences") ne '');
 
       SendCommand($hash, "messages", "getRobotState", undef, @successor);
     }
@@ -201,7 +210,7 @@ sub GetStatus($;$) {
 }
 
 ###################################
-sub Get($@) {
+sub Get {
     my ( $hash, @a ) = @_;
     my $name = $hash->{NAME};
     my $what;
@@ -230,7 +239,7 @@ sub Get($@) {
 }
 
 ###################################
-sub Set($@) {
+sub Set {
     my ( $hash, @a ) = @_;
     my $name  = $hash->{NAME};
 
@@ -315,7 +324,7 @@ sub Set($@) {
         my @names;
         for (my $i = 0; $i < @Boundaries; $i++) {
           my $name = $Boundaries[$i]->{name};
-          push @names,$name if (!(grep { $_ eq $name } @names) and ($name ne ""));
+          push @names,$name if (!(grep { $_ eq $name } @names) && ($name ne ""));
         }
         my $BoundariesList  = @names ? "multiple-strict,".join(",", @names) : "textField";
         $usage .= " setBoundariesOnFloorplan_0:".$BoundariesList if (ReadingsVal($name, "floorplan_0_id" ,"") ne "");
@@ -574,7 +583,7 @@ sub Set($@) {
 }
 
 ###################################
-sub Undefine($$) {
+sub Undefine {
     my ( $hash, $arg ) = @_;
     my $name = $hash->{NAME};
 
@@ -589,7 +598,7 @@ sub Undefine($$) {
 }
 
 ###################################
-sub Delete($$) {
+sub Delete {
     my ( $hash, $arg ) = @_;
     my $name = $hash->{NAME};
 
@@ -602,7 +611,7 @@ sub Delete($$) {
 }
 
 ###################################
-sub Attr(@)
+sub Attr
 {
   my ($cmd,$name,$attr_name,$attr_value) = @_;
   my $hash  = $::defs{$name};
@@ -637,7 +646,7 @@ sub Attr(@)
 ############################################################################################################
 
 #########################
-sub AddExtension($$$) {
+sub AddExtension {
     my ( $name, $func, $link ) = @_;
 
     my $url = "/$link";
@@ -645,37 +654,40 @@ sub AddExtension($$$) {
     $::data{FWEXT}{$url}{deviceName} = $name;
     $::data{FWEXT}{$url}{FUNC}       = $func;
     $::data{FWEXT}{$url}{LINK}       = $link;
+
+    return;
 }
 
 #########################
-sub RemoveExtension($) {
+sub RemoveExtension {
     my ($link) = @_;
 
     my $url  = "/$link";
     my $name = $::data{FWEXT}{$url}{deviceName};
     Log3($name, 2, "Unregistering BOTVAC $name for URL $url...");
     delete $::data{FWEXT}{$url};
+
+    return;
 }
 
 ###################################
-sub SendCommand($$;$$@) {
+sub SendCommand {
     my ( $hash, $service, $cmd, $option, @successor ) = @_;
     my $name        = $hash->{NAME};
     my $email       = $hash->{EMAIL};
     my $password    = ReadPassword($hash);
     my $timestamp   = gettimeofday();
     my $timeout     = 180;
-    my $header;
+    my $keepalive   = 0;
+    my $reqId       = 0;
+    my $URL         = "https://";
+    my %sslArgs     = ();
+    my %header;
     my $data;
-    my $reqId = 0;
-
-    Log3($name, 5, "BOTVAC $name: called function SendCommand()");
-
-    my $URL = "https://";
     my $response;
     my $return;
 
-    my %sslArgs;
+    Log3($name, 5, "BOTVAC $name: called function SendCommand()");
 
     if ($service ne "sessions" && $service ne "dashboard") {
         return if (CheckRegistration($hash, $service, $cmd, $option, @successor));
@@ -690,8 +702,20 @@ sub SendCommand($$;$$@) {
     Log3($name, 4, "BOTVAC $name: REQ option $option") if (defined($option));
     LogSuccessors($hash, @successor);
 
-    $header = "Accept: application/vnd.neato.nucleo.v1";
-    $header .= "\r\nContent-Type: application/json";
+    $header{Accept}         = "application/vnd.neato.nucleo.v1";
+    $header{'Content-Type'} = "application/json";
+
+    my $sslVerify= AttrVal($name, "sslVerify", undef);
+    if(defined($sslVerify)) {
+      eval {use IO::Socket::SSL};
+      if($@) {
+        Log3($name, 2, $@);
+      } else {
+        my $sslVerifyMode= eval {$sslVerify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE};
+        Log3($name, 5, "SSL verify mode set to $sslVerifyMode");
+        $sslArgs{SSL_verify_mode} = $sslVerifyMode;
+      }
+    }
 
     if ($service eq "sessions") {
       if (!defined($password)) {
@@ -702,23 +726,20 @@ sub SendCommand($$;$$@) {
       $URL .= GetBeehiveHost($hash->{VENDOR});
       $URL .= "/sessions";
       $data = "{\"platform\": \"ios\", \"email\": \"$email\", \"token\": \"$token\", \"password\": \"$password\"}";
-      %sslArgs = ( SSL_verify_mode => 0 );
 
     } elsif ($service eq "dashboard") {
-      $header .= "\r\nAuthorization: Token token=".ReadingsVal($name, ".accessToken", "");
+      $header{Authorization} = "Token token=".ReadingsVal($name, ".accessToken", "");
       $URL .= GetBeehiveHost($hash->{VENDOR});
       $URL .= "/dashboard";
-      %sslArgs = ( SSL_verify_mode => 0 );
 
     } elsif ($service eq "robots") {
       my $serial = ReadingsVal($name, "serial", "");
       return if ($serial eq "");
 
-      $header .= "\r\nAuthorization: Token token=".ReadingsVal($name, ".accessToken", "");
+      $header{Authorization} = "Token token=".ReadingsVal($name, ".accessToken", "");
       $URL .= GetBeehiveHost($hash->{VENDOR});
       $URL .= "/users/me/robots/$serial/";
       $URL .= (defined($cmd) ? $cmd : "maps");
-      %sslArgs = ( SSL_verify_mode => 0 );
 
     } elsif ($service eq "messages") {
       my $serial = ReadingsVal($name, "serial", "");
@@ -814,11 +835,10 @@ sub SendCommand($$;$$@) {
       my $message = join("\n", (lc($serial), $date, $data));
       my $hmac = hmac_sha256_hex($message, ReadingsVal($name, ".secretKey", ""));
 
-      $header .= "\r\nDate: $date";
-      $header .= "\r\nAuthorization: NEATOAPP $hmac";
+      $header{Date}          = $date;
+      $header{Authorization} = "NEATOAPP $hmac";
+      $keepalive = 1;
 
-      #%sslArgs = ( SSL_ca =>  [ GetCAKey( $hash ) ] );
-      %sslArgs = ( SSL_verify_mode => 0 );
     } elsif ($service eq "loadmap") {
       $URL = $cmd;
     }
@@ -828,45 +848,58 @@ sub SendCommand($$;$$@) {
       if ( defined($data) );
     Log3($name, 5, "BOTVAC $name: GET $URL")
       if ( !defined($data) );
-    Log3($name, 5, "BOTVAC $name: header $header")
-      if ( defined($header) );
+    Log3($name, 5, "BOTVAC $name: header ".join("\n", map {$_.': '.$header{$_}} keys %header))
+      if ( %header );
 
-    ::HttpUtils_NonblockingGet(
-        {
-            url         => $URL,
-            timeout     => $timeout,
-            noshutdown  => 1,
-            header      => $header,
-            data        => $data,
-            hash        => $hash,
-            service     => $service,
-            cmd         => $cmd,
-            successor   => \@successor,
-            timestamp   => $timestamp,
-            sslargs     => { %sslArgs },
-            callback    => \&ReceiveCommand,
-        }
-    );
+    my $params = {
+        url         => $URL,
+        timeout     => $timeout,
+        noshutdown  => 1,
+        keepalive   => $keepalive,
+        header      => \%header,
+        data        => $data,
+        hash        => $hash,
+        service     => $service,
+        cmd         => $cmd,
+        successor   => \@successor,
+        timestamp   => $timestamp,
+        sslargs     => \%sslArgs,
+        callback    => \&ReceiveCommand
+    };
+
+    if ($keepalive) {
+      map {$hash->{helper}{".HTTP_CONNECTION"}{$_} = $params->{$_}} keys %{$params};
+      ::HttpUtils_NonblockingGet($hash->{helper}{".HTTP_CONNECTION"});
+    } else {
+      ::HttpUtils_NonblockingGet($params);
+    }
 
     return;
 }
 
 ###################################
-sub ReceiveCommand($$$) {
+sub ReceiveCommand {
     my ( $param, $err, $data ) = @_;
-    my $hash      = $param->{hash};
-    my $name      = $hash->{NAME};
-    my $service   = $param->{service};
-    my $cmd       = $param->{cmd};
-    my @successor = @{$param->{successor}};
+    my $hash       = $param->{hash};
+    my $name       = $hash->{NAME};
+    my $service    = $param->{service};
+    my $cmd        = $param->{cmd};
+    my $url        = $param->{url};
+    my $keepalive  = $param->{keepalive};
+    my $respHeader = $param->{httpheader};
+    my @successor  = @{$param->{successor}};
 
     my $rc = ( $param->{buf} ) ? $param->{buf} : $param;
 
     my $loadMap;
     my $return;
     my $reqId = 0;
+    my $closeConnection = (defined($respHeader) && $respHeader =~ m/.*[Cc]onnection: keep-alive.*/ ? 0 : 1);
 
-    Log3($name, 5, "BOTVAC $name: called function ReceiveCommand() rc: $rc err: $err data: $data ");
+    Log3($name, 5, "BOTVAC $name: called function ReceiveCommand() rc: $rc");
+    Log3($name, 5, "BOTVAC $name: header: $respHeader") if (defined($respHeader));
+    Log3($name, 5, "BOTVAC $name: err: $err")           if (defined($err));
+    Log3($name, 5, "BOTVAC $name: data: $data")         if (defined($data));
 
     readingsBeginUpdate($hash);
 
@@ -885,6 +918,9 @@ sub ReceiveCommand($$$) {
         # stop pulling for current interval
         Log3($name, 4, "BOTVAC $name: drop successors");
         LogSuccessors($hash, @successor);
+
+        readingsEndUpdate( $hash, 1 );
+
         return;
     }
 
@@ -901,10 +937,29 @@ sub ReceiveCommand($$$) {
         if ( $data ne "" ) {
             if ( $service eq "loadmap" ) {
                 # use $data later
-            } elsif ( $data =~ /^{"message":"Could not find robot_serial for specified vendor_name"}$/ ) {
+            } elsif ( $data eq '{"message":"Could not find robot_serial for specified vendor_name"}' ) {
                 # currently no data available
                 readingsBulkUpdateIfChanged($hash, "state", "Couldn't find robot");
                 readingsEndUpdate( $hash, 1 );
+                return;
+            } elsif ( $data eq '{"message":"Bad credentials"}' ||
+                      $data eq '{"message":"Not allowed"}' ) {
+                if ( !defined($cmd) || $cmd eq "" ) {
+                    Log3($name, 3, "BOTVAC $name: RES $service - $data");
+                } else {
+                    Log3($name, 3, "BOTVAC $name: RES $service/$cmd - $data");
+                }
+
+                # remove invalid access token
+                readingsDelete($hash, ".accessToken");
+                readingsEndUpdate( $hash, 1 );
+
+                if ( $service ne "sessions") {
+                    # put last command back into queue
+                    unshift(@successor, [$service, $cmd]);
+                    # send registration
+                    SendCommand($hash, "sessions", undef, undef, @successor);
+                }
                 return;
             } elsif ( $data =~ /^{/ || $data =~ /^\[/ ) {
                 if ( !defined($cmd) || $cmd eq "" ) {
@@ -920,7 +975,8 @@ sub ReceiveCommand($$$) {
                 } else {
                     Log3($name, 5, "BOTVAC $name: RES ERROR $service/$cmd\n$data");
                 }
-                return undef;
+                readingsEndUpdate( $hash, 1 );
+                return;
             }
         }
 
@@ -1224,8 +1280,8 @@ sub ReceiveCommand($$$) {
                   my $t2 = GetSecondsFromString($map->{start_at});
                   my $dt = $t1-$t2-$map->{time_in_suspended_cleaning}-$map->{time_in_error}-$map->{time_in_pause};
                   my $dc = $map->{run_charge_at_start}-$map->{run_charge_at_end};
-                  my $expa = int($map->{cleaned_area}*100/$dc+.5) if ($dc > 0);
-                  my $expt = int($dt*100/$dc/60+.5) if ($dc > 0);
+                  my $expa = $dc>0?int($map->{cleaned_area}*100/$dc+.5):0;
+                  my $expt = $dc>0?int($dt*100/$dc/60+.5):0;
                   readingsBulkUpdateIfChanged($hash, "map_duration", int($dt/6+.5)/10); # min
                   readingsBulkUpdateIfChanged($hash, "map_expected_area", $expa>0?$expa:0); # qm
                   readingsBulkUpdateIfChanged($hash, "map_run_discharge", $dc>0?$dc:0); # %
@@ -1273,9 +1329,16 @@ sub ReceiveCommand($$$) {
 
     readingsEndUpdate( $hash, 1 );
 
+    if (defined($hash->{helper}{".HTTP_CONNECTION"}) and
+        (($keepalive && $closeConnection) || !@successor)) {
+      Log3($name, 4, "BOTVAC $name: Close connection");
+      ::HttpUtils_Close($hash->{helper}{".HTTP_CONNECTION"});
+      undef($hash->{helper}{".HTTP_CONNECTION"});
+    }
+
     if ($loadMap) {
-      my $url = ReadingsVal($name, ".map_url", "");
-      push(@successor , ["loadmap", $url]) if ($url ne "");
+      my $mapurl = ReadingsVal($name, ".map_url", "");
+      push(@successor , ["loadmap", $mapurl]) if ($mapurl ne "");
     }
 
     if (@successor) {
@@ -1299,35 +1362,33 @@ sub ReceiveCommand($$$) {
       SendCommand($hash, $cmdService, $cmdCmd, $cmdOption, @successor)
           if (($service ne $cmdService) or ($cmd ne $cmdCmd) or ($newReqId = "true"));
     }
-
+    
     return;
 }
 
-sub GetTimeFromString($) {
+sub GetTimeFromString {
   my ($timeStr) = @_;
 
-  eval {
-    use Time::Local;
-    if(defined($timeStr) and $timeStr =~ m/^(\d{4})-(\d{2})-(\d{2})T([0-2]\d):([0-5]\d):([0-5]\d)Z$/) {
-        my $time = timelocal($6, $5, $4, $3, $2 - 1, $1 - 1900);
-        return FmtDateTime($time + fhemTzOffset($time));
-    }
+  if(defined($timeStr) and $timeStr =~ m/^(\d{4})-(\d{2})-(\d{2})T([0-2]\d):([0-5]\d):([0-5]\d)Z$/x) {
+      my $time = timelocal($6, $5, $4, $3, $2 - 1, $1 - 1900);
+      return FmtDateTime($time + fhemTzOffset($time));
   }
+
+  return;
 }
 
-sub GetSecondsFromString($) {
+sub GetSecondsFromString {
   my ($timeStr) = @_;
 
-  eval {
-    use Time::Local;
-    if(defined($timeStr) and $timeStr =~ m/^(\d{4})-(\d{2})-(\d{2})T([0-2]\d):([0-5]\d):([0-5]\d)Z$/) {
-        my $time = timelocal($6, $5, $4, $3, $2 - 1, $1 - 1900);
-        return $time;
-    }
+  if(defined($timeStr) and $timeStr =~ m/^(\d{4})-(\d{2})-(\d{2})T([0-2]\d):([0-5]\d):([0-5]\d)Z$/x) {
+      my $time = timelocal($6, $5, $4, $3, $2 - 1, $1 - 1900);
+      return $time;
   }
+
+  return;
 }
 
-sub SetRobot($$) {
+sub SetRobot {
     my ( $hash, $robot ) = @_;
     my $name = $hash->{NAME};
 
@@ -1343,9 +1404,11 @@ sub SetRobot($$) {
     readingsBulkUpdateIfChanged($hash, "macAddr",        $robots[$robot]->{macAddr});
     readingsBulkUpdateIfChanged($hash, "nucleoUrl",      $robots[$robot]->{nucleoUrl});
     readingsBulkUpdateIfChanged($hash, "robot",          $robot);
+
+    return;
 }
 
-sub GetCleaningParameter($$$) {
+sub GetCleaningParameter {
   my ($hash, $param, $default) = @_;
   my $name = $hash->{NAME};
 
@@ -1353,7 +1416,7 @@ sub GetCleaningParameter($$$) {
   return ReadingsVal($name, $nextReading, ReadingsVal($name, $param, $default));
 }
 
-sub GetServiceVersion($$) {
+sub GetServiceVersion {
   my ($hash, $service) = @_;
   my $name = $hash->{NAME};
 
@@ -1369,16 +1432,18 @@ sub SetServices {
   my $name = $hash->{NAME};
   my $serviceList = join(", ", map { "$_:$services->{$_}" } keys %$services);
 
-  $hash->{SERVICES} = $serviceList if (!defined($hash->{SERVICES}) or $hash->{SERVICES} ne $serviceList);
+  $hash->{SERVICES} = $serviceList if (!defined($hash->{SERVICES}) || $hash->{SERVICES} ne $serviceList);
+
+  return;
 }
 
-sub StorePassword($$) {
+sub StorePassword {
     my ($hash, $password) = @_;
     my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
     my $key = getUniqueId().$index;
     my $enc_pwd = "";
 
-    if(eval "use Digest::MD5;1") {
+    if($useDigestMD5) {
       $key = Digest::MD5::md5_hex(unpack "H*", $key);
       $key .= Digest::MD5::md5_hex($key);
     }
@@ -1395,7 +1460,7 @@ sub StorePassword($$) {
     return "password successfully saved";
 }
 
-sub ReadPassword($) {
+sub ReadPassword {
     my ($hash) = @_;
     my $name = $hash->{NAME};
     my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
@@ -1408,16 +1473,16 @@ sub ReadPassword($) {
 
     if ( defined($err) ) {
       Log3($name, 3, "BOTVAC $name: unable to read password from file: $err");
-      return undef;
+      return;
     }
 
     if ( defined($password) ) {
-      if ( eval "use Digest::MD5;1" ) {
+      if($useDigestMD5) {
         $key = Digest::MD5::md5_hex(unpack "H*", $key);
         $key .= Digest::MD5::md5_hex($key);
       }
       my $dec_pwd = '';
-      for my $char (map { pack('C', hex($_)) } ($password =~ /(..)/g)) {
+      for my $char (map { pack('C', hex($_)) } ($password =~ /(..)/gx)) {
         my $decode=chop($key);
         $dec_pwd.=chr(ord($char)^ord($decode));
         $key=$decode.$key;
@@ -1425,11 +1490,11 @@ sub ReadPassword($) {
       return $dec_pwd;
     } else {
       Log3($name, 3, "BOTVAC $name: No password in file");
-      return undef;
+      return;
     }
 }
 
-sub CheckRegistration($$$$$) {
+sub CheckRegistration {
   my ( $hash, $service, $cmd, $option, @successor ) = @_;
   my $name = $hash->{NAME};
 
@@ -1455,7 +1520,7 @@ sub CheckRegistration($$$$$) {
   return;
 }
 
-sub GetBoolean($) {
+sub GetBoolean {
     my ($value) = @_;
     my $booleans = {
         '0'       => "0",
@@ -1471,7 +1536,7 @@ sub GetBoolean($) {
     }
 }
 
-sub SetBoolean($) {
+sub SetBoolean {
     my ($value) = @_;
     my $booleans = {
         '0'       => "false",
@@ -1487,7 +1552,7 @@ sub SetBoolean($) {
     }
 }
 
-sub BuildState($$$$) {
+sub BuildState {
     my ($hash,$state,$action,$error) = @_;
     my $states = {
         '0'       => "Invalid",
@@ -1512,7 +1577,7 @@ sub BuildState($$$$) {
     }
 }
 
-sub GetActionText($) {
+sub GetActionText {
     my ($action) = @_;
     my $actions = {
         '0'       => "Invalid",
@@ -1540,7 +1605,7 @@ sub GetActionText($) {
     }
 }
 
-sub GetErrorText($) {
+sub GetErrorText {
     my ($error) = @_;
     my $errors = {
         'ui_alert_invalid'                => 'Ok',
@@ -1562,7 +1627,7 @@ sub GetErrorText($) {
     }
 }
 
-sub GetDayText($) {
+sub GetDayText {
     my ($day) = @_;
     my $days = {
         '0'       => "Sunday",
@@ -1581,7 +1646,7 @@ sub GetDayText($) {
     }
 }
 
-sub GetCategoryText($) {
+sub GetCategoryText {
     my ($category) = @_;
     my $categories = {
         '1' => 'manual',
@@ -1597,7 +1662,7 @@ sub GetCategoryText($) {
     }
 }
 
-sub GetModeText($) {
+sub GetModeText {
     my ($mode) = @_;
     my $modes = {
         '1' => 'eco',
@@ -1611,7 +1676,7 @@ sub GetModeText($) {
     }
 }
 
-sub GetModifierText($) {
+sub GetModifierText {
     my ($modifier) = @_;
     my $modifiers = {
         '1' => 'normal',
@@ -1625,7 +1690,7 @@ sub GetModifierText($) {
     }
 }
 
-sub GetNavigationModeText($) {
+sub GetNavigationModeText {
     my ($navMode) = @_;
     my $navModes = {
         '1' => 'normal',
@@ -1640,7 +1705,7 @@ sub GetNavigationModeText($) {
     }
 }
 
-sub GetAuthStatusText($) {
+sub GetAuthStatusText {
     my ($authStatus) = @_;
     my $authStatusHash = {
         '0' => 'not supported',
@@ -1655,7 +1720,7 @@ sub GetAuthStatusText($) {
     }
 }
 
-sub GetBeehiveHost($) {
+sub GetBeehiveHost {
     my ($vendor) = @_;
     my $vendors = {
         'neato'   => 'beehive.neatocloud.com',
@@ -1669,7 +1734,7 @@ sub GetBeehiveHost($) {
     }
 }
 
-sub GetNucleoHost($) {
+sub GetNucleoHost {
     my ($vendor) = @_;
     my $vendors = {
         'neato'   => 'nucleo.neatocloud.com',
@@ -1683,12 +1748,12 @@ sub GetNucleoHost($) {
     }
 }
 
-sub GetValidityEnd($) {
+sub GetValidityEnd {
     my ($validFor) = @_;
     return ($validFor =~ /\d+/ ? FmtDateTime(time() + $validFor) : $validFor);
 }
 
-sub LogSuccessors($@) {
+sub LogSuccessors {
     my ($hash,@successor) = @_;
     my $name = $hash->{NAME};
 
@@ -1700,9 +1765,11 @@ sub LogSuccessors($@) {
       $msg .= join(",", map { defined($_) ? $_ : '' } @succ_item);
     }
     Log3($name, 4, $msg)  if (@successor > 0);
+
+    return;
 }
 
-sub ShowMap($;$$) {
+sub ShowMap {
     my ($name,$width,$height) = @_;
 
     my $img = '<img src="/fhem/BOTVAC/'.$name.'/map"';
@@ -1728,17 +1795,17 @@ sub GetMap() {
 
 }
 
-sub ShowStatistics($) {
+sub ShowStatistics {
     my ($name) = @_;
     my $hash  = $::defs{$name};
     
     return "maps for statistics are not available yet"
-        if (!defined($hash->{helper}{MAPS}) or @{$hash->{helper}{MAPS}} == 0);
+        if (!defined($hash->{helper}{MAPS}) || @{$hash->{helper}{MAPS}} == 0);
 
     return GetStatistics($hash);
 }
 
-sub GetStatistics($) {
+sub GetStatistics {
     my($hash) = @_;
     my $name = $hash->{NAME};
     my $mapcount = @{$hash->{helper}{MAPS}};
@@ -1839,7 +1906,7 @@ sub GetStatistics($) {
 #######################################
 #       Websocket Functions
 #######################################
-sub wsOpen($$$) {
+sub wsOpen {
     my ($hash,$ip_address,$port) = @_;
     my $name = $hash->{NAME};
 
@@ -1848,16 +1915,18 @@ sub wsOpen($$$) {
 
     ::DevIo_CloseDev($hash) if(::DevIo_IsOpen($hash));
 
-    if (::DevIo_OpenDev($hash, 0, "BOTVAC::wsHandshake")) {
+    if (::DevIo_OpenDev($hash, 0, \&wsHandshake)) {
       Log3($name, 2, "BOTVAC(ws) $name: ERROR: Can't open websocket to $hash->{DeviceName}");
       readingsSingleUpdate($hash,'result','ws_connect_error',1);
       readingsSingleUpdate($hash,'result','ws_ko',1);
     } else {
       readingsSingleUpdate($hash,'result','ws_ok',1);
     }
+
+    return;
 }
 
-sub wsClose($) {
+sub wsClose {
     my $hash = shift;
     my $name = $hash->{NAME};
     my $normal_closure =  pack("H*", "03e8");  #code 1000
@@ -1867,10 +1936,12 @@ sub wsClose($) {
     wsEncode($hash, $normal_closure, "close");
     delete $hash->{HELPER}{WEBSOCKETS};
     delete $hash->{HELPER}{wsKey};
-    readingsSingleUpdate($hash,'state','ws_closed',1) if (::DevIo_CloseDev($hash))
+    readingsSingleUpdate($hash,'state','ws_closed',1) if (::DevIo_CloseDev($hash));
+
+    return;
 }
 
-sub wsHandshake($) {
+sub wsHandshake {
     my $hash    = shift;
     my $name    = $hash->{NAME};
     my $host    = ReadingsVal($name, "wlanIpAddress", "");
@@ -1899,10 +1970,10 @@ sub wsHandshake($) {
 
     $hash->{HELPER}{wsKey}  = $wsKey;
 
-    return undef;
+    return;
 }
 
-sub wsCheckHandshake($$) {
+sub wsCheckHandshake {
     my ($hash,$response) = @_;
     my $name = $hash->{NAME};
 
@@ -1932,20 +2003,20 @@ sub wsCheckHandshake($$) {
         readingsSingleUpdate($hash,'state','ws_handshake-error',1);
       }
     }
-    return undef;
+    return;
 }
 
-sub wsWrite($@) {
+sub wsWrite {
     my ($hash,$string)  = @_;
     my $name = $hash->{NAME};
 
     Log3($name, 4, "BOTVAC(ws) $name: WriteFn called:\n$string");
     ::DevIo_SimpleWrite($hash, $string, 0);
 
-    return undef;
+    return;
 }
 
-sub wsRead($) {
+sub wsRead {
     my $hash = shift;
     my $name = $hash->{NAME};
     my $buf;
@@ -1960,13 +2031,15 @@ sub wsRead($) {
       wsDecode($hash,$buf);
     } elsif( $buf =~ /HTTP\/1.1 101 Switching Protocols/ ) {
       Log3($name, 4, "BOTVAC(ws) $name: received HTTP data string, start response processing:\n$buf");
-      BOTVAC::wsCheckHandshake($hash,$buf);
+      wsCheckHandshake($hash,$buf);
     } else {
       Log3($name, 1, "BOTVAC(ws) $name: corrupted data found:\n$buf");
     }
+
+    return;
 }
 
-sub wsCallback(@) {
+sub wsCallback {
     my ($param, $err, $data) = @_;
     my $hash = $param->{hash};
     my $name = $hash->{NAME};
@@ -1982,12 +2055,15 @@ sub wsCallback(@) {
         } else {
         Log3($name, 2, "received callback without Data and Error String!!!");
     }
-   return undef;
+   return;
 }
 
-sub wsReady($) {
+sub wsReady {
     my ($hash) = @_;
-    return ::DevIo_OpenDev($hash, 1, "BOTVAC::wsHandshake") if ( $hash->{STATE} eq "disconnected" );
+    if ( $hash->{STATE} eq "disconnected" ) {
+      return ::DevIo_OpenDev($hash, 1, \&wsHandshake);
+    }
+    return;
 }
 
 # 0                   1                   2                   3
@@ -2009,7 +2085,7 @@ sub wsReady($) {
 # |                     Payload Data continued ...                |
 # +---------------------------------------------------------------+
 # https://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-17
-sub wsEncode($$;$$) {
+sub wsEncode {
     my ($hash, $payload, $type, $masked) = @_;
     my $name = $hash->{NAME};
     $type //= "text";
@@ -2045,16 +2121,19 @@ sub wsEncode($$;$$) {
 
     Log3($name, 3, "BOTVAC(ws) $name: String: " . unpack('H*',$wsString));
     wsWrite($hash, $wsString);
+
+    return;
 }
 
-sub wsPong($) {
+sub wsPong {
     my $hash = shift;
     my $name = $hash->{NAME};
     Log3($name, 3, "BOTVAC(ws) $name: wsPong");
     wsEncode($hash, undef, "pong");
+    return;
 }
 
-sub wsDecode($$) {
+sub wsDecode {
     my ($hash,$wsString) = @_;
     my $name = $hash->{NAME};
 
@@ -2095,9 +2174,11 @@ sub wsDecode($$) {
         wsPong($hash) if ($OPCODE == $opcode{"ping"});
       }
     }
+
+    return;
 }
 
-sub wsMasking($$) {
+sub wsMasking {
     my ($payload, $mask) = @_;
     $mask = $mask x (int(length($payload) / 4) + 1);
     $mask = substr($mask, 0, length($payload));
@@ -2319,7 +2400,7 @@ sub wsMasking($$) {
   Even though an internet connection is necessary as the initialization is triggered by a remote call.
   <br>
   <em>Note:</em> If the robot does not receive any messages for 30 seconds it will exit Manual Cleaning,
-  but it will not close the websocket connection automaticaly.
+  but it will not close the websocket connection automatically.
   </li>
 <br>
   <li>

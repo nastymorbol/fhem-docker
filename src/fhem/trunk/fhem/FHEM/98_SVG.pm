@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 98_SVG.pm 20950 2020-01-12 10:41:37Z rudolfkoenig $
+# $Id: 98_SVG.pm 21763 2020-04-23 12:05:28Z rudolfkoenig $
 package main;
 
 use strict;
@@ -53,6 +53,11 @@ my $SVG_hdr = 'version="1.1" xmlns="http://www.w3.org/2000/svg" '.
               'xmlns:xlink="http://www.w3.org/1999/xlink" '.
               'data-origin="FHEM"';
 
+my $isDE;
+my %monthNamesDE = (
+  Jan=>"Jan", Feb=>"Feb", Mar=>"Mrz", Apr=>"Apr", May=>"Mai", Jun=>"Jun",
+  Jul=>"Jul", Aug=>"Aug", Sep=>"Sep", Oct=>"Okt", Nov=>"Nov", Dec=>"Dez"
+);
 
 #####################################
 sub
@@ -1211,8 +1216,9 @@ SVG_getData($$$$$)
 
   foreach my $src (@{$srcDesc->{order}}) {
     my $s = $srcDesc->{src}{$src};
-    my $fname = ($defs{$d}{LOGDEVICE} && $src eq $defs{$d}{LOGDEVICE} ?
-                $defs{$d}{LOGFILE} : "CURRENT");
+    my $fname = ($defs{$d}{LOGDEVICE} && $src eq $defs{$d}{LOGDEVICE}) ||
+                ($defs{$src} && $defs{$src}{TYPE} eq "DbLog") ?
+                $defs{$d}{LOGFILE} : "CURRENT";
     my $cmd = "get $src $fname INT $f $t ".$s->{arg};
     FW_fC($cmd, 1);
     if($showData) {
@@ -1667,6 +1673,7 @@ SVG_render($$$$$$$$$$)
   # then the text and the grid
   $off1 = $x;
   $off2 = $y+$h+$th;
+  $isDE = (AttrVal("global", "language","EN") eq "DE");
   my $t = SVG_fmtTime($first_tag, $fromsec);
   SVG_pO "<text x=\"0\" y=\"$off2\" class=\"ylabel\">$t</text>"
         if(!$conf{xrange});
@@ -2366,7 +2373,7 @@ SVG_fmtTime($$)
   $fmt = "" if(!defined($fmt));
   for my $f (split(" ", $fmt)) {
     $ret .= $sep if($ret);
-    $ret .= $tarr[$f];
+    $ret .= ($isDE && $f==1) ? $monthNamesDE{$tarr[$f]} : $tarr[$f];
   }
   return $ret;
 }

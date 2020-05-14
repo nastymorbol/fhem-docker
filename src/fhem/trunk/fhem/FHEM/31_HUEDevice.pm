@@ -1,6 +1,6 @@
 
 
-# $Id: 31_HUEDevice.pm 21039 2020-01-23 13:02:06Z justme1968 $
+# $Id: 31_HUEDevice.pm 21837 2020-05-02 08:59:46Z justme1968 $
 
 # "Hue Personal Wireless Lighting" is a trademark owned by Koninklijke Philips Electronics N.V.,
 # see www.meethue.com for more information.
@@ -344,6 +344,8 @@ HUEDevice_moveToBridge($$$) {
     my $name = $hash->{NAME};
     my $old = AttrVal( $name, 'IODev', '<unknown>' );
 
+    next if( $old eq $new );
+
     Log3 $name, 2, "moving $name [$serial] from $old to $new";
 
     HUEDevice_IODevChanged($hash, undef, $new, $new_id);
@@ -351,7 +353,7 @@ HUEDevice_moveToBridge($$$) {
 
     $found = 1;
     last;
-    }
+  }
 
   return $found;
 }
@@ -1251,9 +1253,12 @@ HUEDevice_Get($@)
     $list = ' devStateIcon:noArg' if( $subtype eq 'blind' );
   }
 
-  if( $hash->{IODev} && $hash->{IODev}{helper}{apiversion} && $hash->{IODev}{helper}{apiversion} >= (1<<16) + (26<<8) ) {
+  if( !$hash->{helper}->{devtype}
+      && $hash->{IODev} && $hash->{IODev}{helper}{apiversion} && $hash->{IODev}{helper}{apiversion} >= (1<<16) + (26<<8) ) {
     $list .= " startup:noArg";
   }
+
+  return "Unknown argument $cmd" if( !$list );
 
   return "Unknown argument $cmd, choose one of $list";
 }

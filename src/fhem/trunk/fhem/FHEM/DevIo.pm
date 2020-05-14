@@ -1,6 +1,8 @@
 ##############################################
-# $Id: DevIo.pm 20174 2019-09-16 18:04:03Z rudolfkoenig $
+# $Id: DevIo.pm 21668 2020-04-14 07:52:22Z rudolfkoenig $
 package main;
+
+use strict;
 
 sub DevIo_CloseDev($@);
 sub DevIo_Disconnected($);
@@ -113,9 +115,9 @@ DevIo_TimeoutRead($$;$$)
     my $nfound = select($rin, undef, undef, $timeout);
     last if($nfound <= 0);      # timeout
     my $r = DevIo_DoSimpleRead($hash);
-    last if(!defined($r) || ($r == "" && $hash->{TCPDev}));
+    last if(!defined($r) || ($r eq "" && $hash->{TCPDev}));
     $answer .= $r;
-    last if(length($anser) >= $maxlen || ($regexp && $answer =~ m/$regexp/));
+    last if(length($answer) >= $maxlen || ($regexp && $answer =~ m/$regexp/));
   }
   return $answer;
 }
@@ -232,7 +234,9 @@ DevIo_OpenDev($$$;$)
   my $doCb = sub ($) {
     my ($r) = @_;
     Log3 $name, 1, "$name: Can't connect to $dev: $r" if(!$reopen && $r);
+    no strict "refs";
     $callback->($hash,$r) if($callback);
+    use strict "refs";
     return $r;
   };
 
@@ -245,7 +249,9 @@ DevIo_OpenDev($$$;$)
     my $ret;
     if($initfn) {
       my $hadFD = defined($hash->{FD});
+      no strict "refs";
       $ret = &$initfn($hash);
+      use strict "refs";
       if($ret) {
         if($hadFD && !defined($hash->{FD})) { # Forum #54732 / ser2net
           DevIo_Disconnected($hash);
@@ -271,6 +277,7 @@ DevIo_OpenDev($$$;$)
     return undef;
   };
   
+  $baudrate = "" if(!defined($baudrate));
   if($baudrate =~ m/(\d+)(,([78])(,([NEO])(,([012]))?)?)?/) {
     $baudrate = $1 if(defined($1));
     $databits = $3 if(defined($3));

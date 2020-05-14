@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 01_FHEMWEB.pm 20818 2019-12-23 20:12:15Z rudolfkoenig $
+# $Id: 01_FHEMWEB.pm 21647 2020-04-12 12:13:17Z rudolfkoenig $
 package main;
 
 use strict;
@@ -1141,9 +1141,10 @@ FW_answerCall($)
       $srVal = FW_showRoom(); 
 
     } else {
-      my $motd = AttrVal("global","motd","none");
-      if($motd ne "none") {
-        FW_addContent("><pre class='motd'>$motd</pre></div");
+      my $motd = AttrVal("global", "motd", "");
+      my $gie = $defs{global}{init_errors};
+      if($motd ne "none" && ($motd || $gie)) {
+        FW_addContent("><pre class='motd'>$motd\n$gie</pre></div");
       }
     }
   }

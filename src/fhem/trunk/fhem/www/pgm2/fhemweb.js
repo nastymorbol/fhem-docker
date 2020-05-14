@@ -1,6 +1,6 @@
 "use strict";
 var FW_version={};
-FW_version["fhemweb.js"] = "$Id: fhemweb.js 20554 2019-11-20 20:53:04Z rudolfkoenig $";
+FW_version["fhemweb.js"] = "$Id: fhemweb.js 21625 2020-04-08 10:15:11Z rudolfkoenig $";
 
 var FW_serverGenerated;
 var FW_serverFirstMsg = (new Date()).getTime()/1000;
@@ -306,7 +306,12 @@ FW_jqueryReadyFn()
       $("#content")
         .append("<div id='workbench' style='display:none'></div>");
       $("#content > #workbench").html(data);
-      var aTag = $("#content > #workbench").find("a[name="+val+"]");
+
+      var mtype = $("#content > #workbench a[name]").attr("name"), aTag;
+      if(mtype)
+        aTag = $("#content > #workbench").find("a[name="+mtype+val+"]");
+      if(!$(aTag).length) // old style syntax without type
+        aTag = $("#content > #workbench").find("a[name="+val+"]");
       if($(aTag).length) {
         var liTag = $(aTag).next("li");
         if(!$(liTag).length)

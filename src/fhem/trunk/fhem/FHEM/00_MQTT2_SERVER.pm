@@ -1,8 +1,6 @@
 ##############################################
-# $Id: 00_MQTT2_SERVER.pm 20451 2019-11-04 10:37:40Z rudolfkoenig $
+# $Id: 00_MQTT2_SERVER.pm 21625 2020-04-08 10:15:11Z rudolfkoenig $
 package main;
-
-# TODO: test SSL
 
 use strict;
 use warnings;
@@ -44,6 +42,7 @@ MQTT2_SERVER_Initialize($)
     clientId
     disable:1,0
     disabledForIntervals
+    ignoreRegexp
     keepaliveFactor
     rePublish:1,0
     rawEvents
@@ -139,6 +138,14 @@ MQTT2_SERVER_Attr(@)
   if($type eq "set" && $attrName eq "SSL") {
     TcpServer_SetSSL($hash);
   }
+
+  if($type eq "set" && $attrName eq "ignoreRegexp") {
+    my $re = join(" ",@param);
+    return "bad $devName ignoreRegexp: $re" if($re eq "1" || $re =~ m/^\*/);
+    eval { "Hallo" =~ m/$re/ };
+    return "bad $devName ignoreRegexp: $re: $@" if($@);
+  }
+
   return undef;
 } 
 
@@ -325,7 +332,7 @@ MQTT2_SERVER_Read($@)
     $hash->{subscriptions} = {};
     $defs{$sname}{clients}{$cname} = 1;
 
-    Log3 $sname, 4, "  $cname $hash->{cid} $cpt V:$hash->{protoNum} $desc";
+    Log3 $sname, 4, "  $cname cid:$hash->{cid} $cpt V:$hash->{protoNum} $desc";
     MQTT2_SERVER_out($hash, pack("C*", 0x20, 2, 0, 0), $dump); # CONNACK+OK
 
   ####################################
@@ -445,6 +452,9 @@ MQTT2_SERVER_doPublish($$$$;$)
   }
 
   my $serverName = $server->{NAME};
+  my $ir = AttrVal($serverName, "ignoreRegexp", undef);
+  next if(defined($ir) && "$tp:$val" =~ m/$ir/);
+
   my $cid = $src->{cid};
   $tp =~ s/:/_/g; # 96608
   if(defined($cid) ||                    # "real" MQTT client
@@ -617,7 +627,7 @@ MQTT2_SERVER_ReadDebug($$)
   <b>Attributes</b>
   <ul>
 
-    <a name="clientId"></a>
+    <a name="MQTT2_SERVERclientId"></a>
     <li>clientId &lt;name&gt;<br>
       set the MQTT clientId for all connections, for setups with clients
       creating a different MQTT-ID for each connection. The autocreate
@@ -632,7 +642,12 @@ MQTT2_SERVER_ReadDebug($$)
       messages, but not forward them.
       </li><br>
 
-    <a name="keepaliveFactor"></a>
+    <a name="MQTT2_SERVERignoreRegexp"></a>
+    <li>ignoreRegexp<br>
+      if $topic:$message matches ignoreRegexp, then it will be silently ignored.
+      </li>
+
+    <a name="MQTT2_SERVERkeepaliveFactor"></a>
     <li>keepaliveFactor<br>
       the oasis spec requires a disconnect, if after 1.5 times the client
       supplied keepalive no data or PINGREQ is sent. With this attribute you
@@ -644,13 +659,13 @@ MQTT2_SERVER_ReadDebug($$)
       </ul>
       </li>
     
-    <a name="rawEvents"></a>
+    <a name="MQTT2_SERVERrawEvents"></a>
     <li>rawEvents &lt;topic-regexp&gt;<br>
       Send all messages as events attributed to this MQTT2_SERVER instance.
       Should only be used, if there is no MQTT2_DEVICE to process the topic.
       </li><br>
 
-    <a name="rePublish"></a>
+    <a name="MQTT2_SERVERrePublish"></a>
     <li>rePublish<br>
       if a topic is published from a source inside of FHEM (e.g. MQTT2_DEVICE),
       it is only sent to real MQTT clients, and it will not internally
@@ -658,7 +673,7 @@ MQTT2_SERVER_ReadDebug($$)
       to the FHEM internal clients.
       </li><br>
 
-    <a name="SSL"></a>
+    <a name="MQTT2_SERVERSSL"></a>
     <li>SSL<br>
       Enable SSL (i.e. TLS)
       </li><br>
@@ -672,7 +687,7 @@ MQTT2_SERVER_ReadDebug($$)
        also the SSL attribute.
        </li><br>
 
-    <a name="autocreate"></a>
+    <a name="MQTT2_SERVERautocreate"></a>
     <li>autocreate [no|simple|complex]<br>
       MQTT2_DEVICES will be automatically created upon receiving an
       unknown message. Set this value to no to disable autocreating, the
