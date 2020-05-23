@@ -5,4 +5,5 @@ fhem/backup/*
 fhem/cache/*
 fhem/log/*
 fhem/restoreDir/*
-src/fhem/trunk/*
+src/fhem/trunk/CVSROOT/*
+src/fhem/trunk/.svn/*
