@@ -35,7 +35,7 @@ function print_env () {
         printf "%s %s=%s " "--build-arg" "$n" "$v";        
     done < <(env -0)
 }
-print_env;
+#print_env;
 echo
 echo
 echo "--- Docker Login\n"
