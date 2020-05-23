@@ -365,8 +365,11 @@ echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -y -q -V upgrade" >> /etc/sudoer
 echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -y -q -V dist-upgrade" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/npm update *" >> /etc/sudoers.d/fhem-docker
 
+# Allow installation of new perl packages
 # Allow installation of new packages
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/local/bin/cpanm *" >> /etc/sudoers.d/fhem-docker
+echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/cpanm *" >> /etc/sudoers.d/fhem-docker
+echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/perl - App\:\:cpanminus" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD: /usr/bin/apt-get -y install *" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/npm install *" >> /etc/sudoers.d/fhem-docker
 echo "fhem ALL=(ALL) NOPASSWD:SETENV: /usr/bin/npm uninstall *" >> /etc/sudoers.d/fhem-docker

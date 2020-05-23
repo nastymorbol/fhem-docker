@@ -80,7 +80,7 @@ ENV LANG=en_US.UTF-8 \
    LANGUAGE=en_US:en \
    LC_ADDRESS=de_DE.UTF-8 \
    LC_MEASUREMENT=de_DE.UTF-8 \
-   LC_MESSAGES=en_DK.UTF-8 \
+   LC_MESSAGES=de_DE.UTF-8 \
    LC_MONETARY=de_DE.UTF-8 \
    LC_NAME=de_DE.UTF-8 \
    LC_NUMERIC=de_DE.UTF-8 \
@@ -109,6 +109,9 @@ COPY src/ssh_known_hosts.txt /ssh_known_hosts.txt
 COPY src/health-check.sh /health-check.sh
 COPY src/find-* /usr/local/bin/
 COPY src/99_DockerImageInfo.pm /fhem/FHEM/
+COPY src/99_myUtils.pm /fhem/FHEM/
+COPY src/00_.*.pm /fhem/FHEM/
+COPY src/fhem.cfg /fhem/
 RUN chmod 755 /*.sh /usr/local/bin/* \
     && echo "org.opencontainers.image.created=${BUILD_DATE}\norg.opencontainers.image.authors=${L_AUTHORS}\norg.opencontainers.image.url=${L_URL}\norg.opencontainers.image.documentation=${L_USAGE}\norg.opencontainers.image.source=${L_VCS_URL}\norg.opencontainers.image.version=${IMAGE_VERSION}\norg.opencontainers.image.revision=${IMAGE_VCS_REF}\norg.opencontainers.image.vendor=${L_VENDOR}\norg.opencontainers.image.licenses=${L_LICENSES}\norg.opencontainers.image.title=${L_TITLE}\norg.opencontainers.image.description=${L_DESCR}\norg.fhem.authors=${L_AUTHORS_FHEM}\norg.fhem.url=${L_URL_FHEM}\norg.fhem.documentation=${L_USAGE_FHEM}\norg.fhem.source=${L_VCS_URL_FHEM}\norg.fhem.version=${FHEM_VERSION}\norg.fhem.revision=${VCS_REF}\norg.fhem.vendor=${L_VENDOR_FHEM}\norg.fhem.licenses=${L_LICENSES_FHEM}\norg.fhem.description=${L_DESCR_FHEM}" > /image_info \
     && sed -i "s/buster main/buster main contrib non-free/g" /etc/apt/sources.list \
@@ -125,7 +128,7 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qqy --no-install-recommends upgrade \
     \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales \
-    && echo 'de_DE@euro ISO-8859-15\nde_DE ISO-8859-1\nde_DE.UTF-8 UTF-8\nen_DK ISO-8859-1\nen_DK.ISO-8859-15 ISO-8859-15\nen_DK.UTF-8 UTF-8\nen_GB ISO-8859-1\nen_GB.ISO-8859-15 ISO-8859-15\nen_GB.UTF-8 UTF-8\nen_IE ISO-8859-1\nen_IE.ISO-8859-15 ISO-8859-15\nen_IE.UTF-8 UTF-8\nen_US ISO-8859-1\nen_US.ISO-8859-15 ISO-8859-15\nen_US.UTF-8 UTF-8\nes_ES@euro ISO-8859-15\nes_ES ISO-8859-1\nes_ES.UTF-8 UTF-8\nfr_FR@euro ISO-8859-15\nfr_FR ISO-8859-1\nfr_FR.UTF-8 UTF-8\nit_IT@euro ISO-8859-15\nit_IT ISO-8859-1\nit_IT.UTF-8 UTF-8\nnl_NL@euro ISO-8859-15\nnl_NL ISO-8859-1\nnl_NL.UTF-8 UTF-8\npl_PL ISO-8859-2\npl_PL.UTF-8 UTF-8' >/etc/locale.gen \
+    && echo 'de_DE@euro ISO-8859-15\nde_DE ISO-8859-1\nde_DE.UTF-8 UTF-8\nen_GB ISO-8859-1\nen_GB.ISO-8859-15 ISO-8859-15\nen_GB.UTF-8 UTF-8\nen_US ISO-8859-1\nen_US.ISO-8859-15 ISO-8859-15\nen_US.UTF-8 UTF-8\nnl_NL@euro ISO-8859-15\nnl_NL ISO-8859-1\nnl_NL.UTF-8 UTF-8' >/etc/locale.gen \
     && LC_ALL=C locale-gen \
     \
     && ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
@@ -136,10 +139,7 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
     && sed -i "s,http://security.debian.org,https://cdn-aws.deb.debian.org,g" /etc/apt/sources.list \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends \
-        adb \
         avahi-daemon \
-        avrdude \
-        bluez \
         curl \
         dnsutils \
         etherwake \
@@ -158,7 +158,6 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
         procps \
         sendemail \
         sqlite3 \
-        subversion \
         sudo \
         telnet \
         unzip \
@@ -249,6 +248,7 @@ RUN LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
         libxml-xpathengine-perl \
         libyaml-libyaml-perl \
         libyaml-perl \
+        libboolean-perl \
     && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* ~/.[^.] ~/.??* ~/*
 
