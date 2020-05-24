@@ -42,8 +42,9 @@ echo "--- Docker Login\n"
 docker login
 echo
 echo "--- Start BUILD\n"
-docker buildx build $(print_env) --platform linux/amd64,linux/arm64,linux/arm/v7 -t nastymorbol/fhem:dotnet --push .
-#linux/arm64
+docker buildx build $(print_env) --platform linux/amd64,linux/arm/v7 -t nastymorbol/fhem:dotnet --push .
+# ARM64 derzeit nicht benötigt
+#linux/arm64 
 #docker build $(print_env) -t nastymorbol/fhem:dotnet .
 #docker run -it --rm --name fhem-test -p "8083:8083" -v "$(pwd)/../fhem-dev/:/opt/fhem/" nastymorbol/fhem:dotnet
 
