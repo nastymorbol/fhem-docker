@@ -47,7 +47,8 @@ postMqttSenMl($$$$)
 
 	push(@records, \%rec_hash);
 	my $payload = JSON->new->utf8(0)->encode(\@records);
-	fhem("set Mainflux publish $topic $payload");
+	# Send to ALL MQTT Clients ....
+	fhem("set TYPE=MQTT2_CLIENT publish $topic $payload");
 }
 
 sub
