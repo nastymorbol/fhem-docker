@@ -102,15 +102,15 @@ ENV LANG=en_US.UTF-8 \
    TIMEOUT=10 \
    CONFIGTYPE=fhem.cfg
 
-# Install base environment
+
+# Copy FHEM to Image
 COPY ./src/qemu-* /usr/bin/
 COPY src/entry.sh /entry.sh
 COPY src/ssh_known_hosts.txt /ssh_known_hosts.txt
 COPY src/health-check.sh /health-check.sh
 COPY src/find-* /usr/local/bin/
-COPY src/99_* /fhem/FHEM/
-COPY src/00_* /fhem/FHEM/
-COPY src/fhem.cfg /fhem/
+
+# Install base environment
 RUN chmod 755 /*.sh /usr/local/bin/* \
     && echo "org.opencontainers.image.created=${BUILD_DATE}\norg.opencontainers.image.authors=${L_AUTHORS}\norg.opencontainers.image.url=${L_URL}\norg.opencontainers.image.documentation=${L_USAGE}\norg.opencontainers.image.source=${L_VCS_URL}\norg.opencontainers.image.version=${IMAGE_VERSION}\norg.opencontainers.image.revision=${IMAGE_VCS_REF}\norg.opencontainers.image.vendor=${L_VENDOR}\norg.opencontainers.image.licenses=${L_LICENSES}\norg.opencontainers.image.title=${L_TITLE}\norg.opencontainers.image.description=${L_DESCR}\norg.fhem.authors=${L_AUTHORS_FHEM}\norg.fhem.url=${L_URL_FHEM}\norg.fhem.documentation=${L_USAGE_FHEM}\norg.fhem.source=${L_VCS_URL_FHEM}\norg.fhem.version=${FHEM_VERSION}\norg.fhem.revision=${VCS_REF}\norg.fhem.vendor=${L_VENDOR_FHEM}\norg.fhem.licenses=${L_LICENSES_FHEM}\norg.fhem.description=${L_DESCR_FHEM}" > /image_info \
     && sed -i "s/buster main/buster main contrib non-free/g" /etc/apt/sources.list \
@@ -144,19 +144,16 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
         etherwake \
         fonts-liberation \
         git-core \
-        i2c-tools \
         inetutils-ping \
         jq \
         libcap-ng-utils \
         libcap2-bin \
         lsb-release \
-        mariadb-client \
         netcat \
         net-tools \
         openssh-client \
         procps \
         sendemail \
-        sqlite3 \
         sudo \
         telnet \
         unzip \
@@ -166,30 +163,6 @@ RUN chmod 755 /*.sh /usr/local/bin/* \
     && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* ~/.[^.] ~/.??* ~/*
 
-# Add extended system layer
-RUN if [ "${IMAGE_LAYER_SYS_EXT}" != "0" ]; then \
-      LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
-      && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends \
-          alsa-utils \
-          dfu-programmer \
-          ffmpeg \
-          espeak \
-          lame \
-          libsox-fmt-all \
-          libttspico-utils \
-          mp3wrap \
-          mpg123 \
-          mplayer \
-          nmap \
-          normalize-audio \
-          snmp \
-          snmp-mibs-downloader \
-          sox \
-          vorbis-tools \
-      && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \
-      && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* ~/.[^.] ~/.??* ~/* \
-    ; fi
-
 # Add Perl basic app layer for pre-compiled packages
 RUN LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
     && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends \
@@ -197,59 +170,43 @@ RUN LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
         libarchive-extract-perl \
         libarchive-zip-perl \
         libcgi-pm-perl \
-        libcpanel-json-xs-perl \
-        libdbd-mariadb-perl \
-        libdbd-mysql \
-        libdbd-mysql-perl \
-        libdbd-pg-perl \
-        libdbd-pgsql \
-        libdbd-sqlite3 \
-        libdbd-sqlite3-perl \
-        libdbi-perl \
         libdevice-serialport-perl \
-        libdevice-usb-perl \
-        libgd-graph-perl \
-        libgd-text-perl \
-        libimage-imlib2-perl \
-        libimage-info-perl \
-        libimage-librsvg-perl \
-        libio-all-perl \
-        libio-file-withpath-perl \
-        libio-interface-perl \
-        libio-socket-inet6-perl \
-        libio-socket-ssl-perl \
         libjson-perl \
         libjson-pp-perl \
         libjson-xs-perl \
-        liblist-moreutils-perl \
-        libmail-gnupg-perl \
-        libmail-imapclient-perl \
-        libmail-sendmail-perl \
+        libnet-telnet-perl \
+        libcrypt-rijndael-perl \
+        libdatetime-format-strptime-perl \
+        libxml-simple-perl \
         libmime-base64-perl \
         libmime-lite-perl \
-        libnet-server-perl \
-        libsocket6-perl \
-        libterm-readline-perl-perl \
-        libtext-csv-perl \
-        libtext-diff-perl \
-        libtext-iconv-perl \
-        libtimedate-perl \
-        libutf8-all-perl \
-        libwww-curl-perl \
-        libwww-perl \
-        libxml-libxml-perl \
-        libxml-parser-lite-perl \
-        libxml-parser-perl \
-        libxml-simple-perl \
-        libxml-stream-perl \
-        libxml-treebuilder-perl \
-        libxml-xpath-perl \
-        libxml-xpathengine-perl \
-        libyaml-libyaml-perl \
-        libyaml-perl \
         libboolean-perl \
     && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* ~/.[^.] ~/.??* ~/*
+
+# Add extended system layer
+RUN if [ "${IMAGE_LAYER_SYS_EXT}" != "0" ]; then \
+      LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update \
+      && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends \
+          lame \
+          alsa-utils \
+          dfu-programmer \
+          ffmpeg \
+          espeak \
+          mp3wrap \
+          mpg123 \
+          mplayer \
+          nmap \
+          normalize-audio \
+          sox \
+          vorbis-tools \
+          libttspico-utils \
+          libsox-fmt-all \
+          snmp \
+          snmp-mibs-downloader \
+      && LC_ALL=C apt-get autoremove -qqy && LC_ALL=C apt-get clean \
+      && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* ~/.[^.] ~/.??* ~/* \
+    ; fi
 
 # Add Perl extended app layer for pre-compiled packages
 RUN if [ "${IMAGE_LAYER_PERL_EXT}" != "0" ]; then \
@@ -428,6 +385,9 @@ RUN if ( [ "${NPM_PKGS}" != "" ] || [ "${IMAGE_LAYER_NODEJS}" != "0" ] || [ "${I
 # Note: Manual checkout is required if build is not run by Travis:
 #   svn co https://svn.fhem.de/fhem/trunk ./src/fhem/trunk
 COPY src/fhem/trunk/fhem/ /fhem/
+COPY src/99_* /fhem/FHEM/
+COPY src/00_* /fhem/FHEM/
+COPY src/fhem.cfg /fhem/
 
 VOLUME [ "/opt/fhem" ]
 

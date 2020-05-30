@@ -6,6 +6,7 @@
 #export BASE_IMAGE_TAG="3.1"
 # Microsoft uses debian:buster-slim
 
+export DOCKER_VERSION="0.0.4.50"
 export BASE_IMAGE="debian"
 export BASE_IMAGE_TAG="buster-slim"
 export IMAGE_LAYER_SYS_EXT="0" 
@@ -16,7 +17,11 @@ export IMAGE_LAYER_PERL_CPAN_EXT="0"
 export IMAGE_LAYER_PYTHON="0" 
 export IMAGE_LAYER_PYTHON_EXT="0"
 export IMAGE_LAYER_NODEJS="0"
-export IMAGE_LAYER_NODEJS_EXT="0" 
+export IMAGE_LAYER_NODEJS_EXT="0"
+
+export CPAN_PKGS=""
+export PIP_PKGS=""
+export NPM_PKGS=""
 
 function print_env () {
     while IFS='=' read -r -d '' n v; do 
@@ -48,6 +53,10 @@ function print_env2 () {
     printf "%s %s=%s " "--build-arg" "IMAGE_LAYER_PYTHON_EXT" "$IMAGE_LAYER_PYTHON_EXT";
     printf "%s %s=%s " "--build-arg" "IMAGE_LAYER_NODEJS" "$IMAGE_LAYER_NODEJS";
     printf "%s %s=%s " "--build-arg" "IMAGE_LAYER_NODEJS_EXT" "$IMAGE_LAYER_SYS_EXT";
+
+    printf "%s %s=%s " "--build-arg" "CPAN_PKGS" "$CPAN_PKGS";
+    printf "%s %s=%s " "--build-arg" "PIP_PKGS" "$PIP_PKGS";
+    printf "%s %s=%s " "--build-arg" "NPM_PKGS" "$NPM_PKGS";
 }
 
 print_env2;
@@ -57,10 +66,10 @@ echo "--- Docker Login\n"
 docker login
 echo
 echo "--- Start BUILD\n"
-#docker buildx build $(print_env2) --platform linux/amd64,linux/arm/v7 -t nastymorbol/fhem:dotnet --push .
+docker buildx build $(print_env2) --platform linux/amd64,linux/arm/v7 -t nastymorbol/fhem:$DOCKER_VERSION -t nastymorbol/fhem:latest --push .
 # ARM64 derzeit nicht benötigt
 #linux/arm64 
-docker build $(print_env2) -t nastymorbol/fhem:dotnet .
-docker run -it --rm --name fhem-test -p "8083:8083" -v "$(pwd)/../fhem-dev/:/opt/fhem/" nastymorbol/fhem:dotnet
 
-rm -r "$(pwd)/../fhem-dev"
+#docker build $(print_env2) -t nastymorbol/fhem:$DOCKER_VERSION -t nastymorbol/fhem:latest .
+#docker run -it --rm --name fhem-test -p "8083:8083" -v "$(pwd)/../fhem-dev/:/opt/fhem/" nastymorbol/fhem:latest
+#rm -r "$(pwd)/../fhem-dev"

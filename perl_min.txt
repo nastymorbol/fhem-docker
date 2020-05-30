@@ -1,0 +1,49 @@
+        # APT PACKAGES
+
+
+        
+        libio-all-perl \
+        libio-file-withpath-perl \
+        libio-interface-perl \
+        libio-socket-inet6-perl \
+        libio-socket-ssl-perl \
+        libnet-server-perl \
+        libcpanel-json-xs-perl \
+        libdbd-mariadb-perl \
+        libdbd-mysql \
+        libdbd-mysql-perl \
+        libdbd-pg-perl \
+        libdbd-pgsql \
+        libdbd-sqlite3 \
+        libdbd-sqlite3-perl \
+        libdbi-perl \
+        libdevice-usb-perl \
+        libgd-graph-perl \
+        libgd-text-perl \
+        libimage-imlib2-perl \
+        libimage-info-perl \
+        libimage-librsvg-perl \
+        liblist-moreutils-perl \
+        libmail-gnupg-perl \
+        libmail-imapclient-perl \
+        libmail-sendmail-perl \
+        libsocket6-perl \
+        libterm-readline-perl-perl \
+        libtext-csv-perl \
+        libtext-diff-perl \
+        libtext-iconv-perl \
+        libtimedate-perl \
+        libutf8-all-perl \
+        libwww-curl-perl \
+        libwww-perl \
+        libxml-libxml-perl \
+        libxml-parser-lite-perl \
+        libxml-parser-perl \
+        libxml-simple-perl \
+        libxml-stream-perl \
+        libxml-treebuilder-perl \
+        libxml-xpath-perl \
+        libxml-xpathengine-perl \
+        libyaml-libyaml-perl \
+        libyaml-perl \
+   
