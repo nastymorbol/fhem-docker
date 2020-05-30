@@ -1,5 +1,5 @@
 ARG BASE_IMAGE="debian"
-ARG BASE_IMAGE_TAG="buster"
+ARG BASE_IMAGE_TAG="buster-slim"
 FROM ${BASE_IMAGE}:${BASE_IMAGE_TAG}
 
 # Arguments to instantiate as variables

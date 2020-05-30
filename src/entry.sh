@@ -212,6 +212,11 @@ if [ -d "/fhem" ]; then
     echo "$i. Updating existing FHEM installation in ${FHEM_DIR}"
     [ -s ${FHEM_DIR}/${CONFIGTYPE} ] && cp -f ${FHEM_DIR}/${CONFIGTYPE} ${FHEM_DIR}/${CONFIGTYPE}.bak
     cp -f /fhem/FHEM/99_DockerImageInfo.pm ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/00_BACnetDatapoint.pm ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/00_BACnetDevice.pm ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/00_BACnetNetwork.pm ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/00_DEOSPush.pm ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/99_myUtils.pm ${FHEM_DIR}/FHEM/
   fi
   (( i++ ))
 
