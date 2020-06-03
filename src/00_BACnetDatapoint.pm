@@ -72,7 +72,7 @@ BACnetDatapoint_Set($$)
     readingsSingleUpdate($hash, $cmd, $value, 1);
     return undef;
   }
-  elsif($cmd eq "outOfService")
+  elsif($cmd =~ /outOfService|alarmValue/)
   {
     my $value = shift @a;
     readingsSingleUpdate($hash, "state", "Write Property $cmd -> $value", 1);
@@ -112,15 +112,20 @@ BACnetDatapoint_Set($$)
 
   my @setList = ();
 
-  push @setList, "limitEnable:multiple-strict,low-limit,high-limit";
   push @setList, "outOfService:uzsuToggle,True,False";
 
   if($hash->{ObjectType} =~ /AI|AV|AO/) 
   {      
+    push @setList, "limitEnable:multiple-strict,low-limit,high-limit";
     push @setList, "covIncrement:slider,0,0.1,20,1";
     push @setList, "lowLimit:slider,-100,1,100,1";
     push @setList, "highLimit:slider,-100,1,100,1";
     push @setList, "presentValue:slider,-100,1,100,1";
+  }
+  elsif($hash->{ObjectType} =~ /BI|BV|BO/) 
+  {      
+    push @setList, "presentValue:uzsuToggle,True,False";
+    push @setList, "alarmValue:uzsuToggle,True,False";
   }
 
   return join ' ', @setList;

@@ -217,6 +217,9 @@ if [ -d "/fhem" ]; then
     cp -f /fhem/FHEM/00_BACnetNetwork.pm ${FHEM_DIR}/FHEM/
     cp -f /fhem/FHEM/00_DEOSPush.pm ${FHEM_DIR}/FHEM/
     cp -f /fhem/FHEM/99_myUtils.pm ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/deos_00_bacnet.cfg ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/deos_00_mqtt.cfg ${FHEM_DIR}/FHEM/
+    cp -f /fhem/FHEM/deos_00_push.cfg ${FHEM_DIR}/FHEM/
   fi
   (( i++ ))
 
