@@ -184,6 +184,7 @@ BACnetDevice_Define($$)
 
   $hash->{IODev} = $networkName;
   $hash->{Instance} = $instance;
+  $hash->{ObjectId} = "DEV:$instance";
   $hash->{IP} = $ip;
 
   $hash->{RouterIp} = $routerIp if($routerIp);
