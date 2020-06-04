@@ -38,7 +38,7 @@ ARG L_AUTHORS="Julian Pawlowski (Forum.fhem.de:@loredo, Twitter:@loredo)"
 ARG L_URL="https://hub.docker.com/r/fhem/fhem-${ARCH}_${PLATFORM}"
 ARG L_USAGE="https://github.com/fhem/fhem-docker/blob/${IMAGE_VCS_REF}/README.md"
 ARG L_VCS_URL="https://github.com/fhem/fhem-docker/"
-ARG L_VENDOR="Julian Pawlowski"
+ARG L_VENDOR="Steve Schulze"
 ARG L_LICENSES="MIT"
 ARG L_TITLE="fhem-${ARCH}_${PLATFORM}"
 ARG L_DESCR="A basic Docker image for FHEM house automation system, based on Debian Buster."
@@ -389,6 +389,7 @@ COPY src/99_* /fhem/FHEM/
 COPY src/00_* /fhem/FHEM/
 COPY src/fhem.cfg /fhem/
 COPY src/fhem_00_* /fhem/FHEM/
+COPY src/deosstyle.css /fhem/www/pgm2/
 
 
 VOLUME [ "/opt/fhem" ]

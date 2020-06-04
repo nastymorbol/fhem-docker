@@ -220,6 +220,7 @@ if [ -d "/fhem" ]; then
     cp -f /fhem/FHEM/deos_00_bacnet.cfg ${FHEM_DIR}/FHEM/
     cp -f /fhem/FHEM/deos_00_mqtt.cfg ${FHEM_DIR}/FHEM/
     cp -f /fhem/FHEM/deos_00_push.cfg ${FHEM_DIR}/FHEM/
+    cp -f /fhem/www/pgm2/deosstyle.css ${FHEM_DIR}/www/pgm2/    
   fi
   (( i++ ))
 
