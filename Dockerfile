@@ -13,7 +13,7 @@ ARG BUILD_DATE=""
 ARG IMAGE_VCS_REF=""
 ARG VCS_REF=""
 ARG FHEM_VERSION=""
-ARG IMAGE_VERSION="0.0.4.52"
+ARG IMAGE_VERSION=""
 
 # Custom build options:
 #  Disable certain image layers using build env variables if desired

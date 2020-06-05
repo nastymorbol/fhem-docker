@@ -6,7 +6,7 @@
 #export BASE_IMAGE_TAG="3.1"
 # Microsoft uses debian:buster-slim
 
-export DOCKER_VERSION="0.0.4.50"
+export DOCKER_VERSION="0.0.4.54"
 export BASE_IMAGE="debian"
 export BASE_IMAGE_TAG="buster-slim"
 export IMAGE_LAYER_SYS_EXT="0" 
@@ -57,6 +57,8 @@ function print_env2 () {
     printf "%s %s=%s " "--build-arg" "CPAN_PKGS" "$CPAN_PKGS";
     printf "%s %s=%s " "--build-arg" "PIP_PKGS" "$PIP_PKGS";
     printf "%s %s=%s " "--build-arg" "NPM_PKGS" "$NPM_PKGS";
+
+    printf "%s %s=%s " "--build-arg" "IMAGE_VERSION" "$DOCKER_VERSION";
 }
 
 print_env2;
