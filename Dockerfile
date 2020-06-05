@@ -388,7 +388,7 @@ COPY src/fhem/trunk/fhem/ /fhem/
 COPY src/99_* /fhem/FHEM/
 COPY src/00_* /fhem/FHEM/
 COPY src/fhem.cfg /fhem/
-COPY src/fhem_00_* /fhem/FHEM/
+COPY src/deos_00_* /fhem/FHEM/
 COPY src/deosstyle.css /fhem/www/pgm2/
 
 
