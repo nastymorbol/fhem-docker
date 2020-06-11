@@ -159,12 +159,12 @@ BACnetDatapoint_Define($$)
   return "Unknown BACnetInstance in ObjectId $objectId. Please set ID:INSTANCE" if( index($objectId, ':') == -1 );
   return "Unknown BACnetObjectType in ObjectId $objectId. Please set ID:INSTANCE" if( index($objectId, ':') == -1 );
 
-  my ($type, $instance) = split ':', $objectId;
+  my ($btype, $instance) = split ':', $objectId;
 
   return "Unknown BACnetObjectInstance in ObjectId $objectId. Please set ID:INSTANCE" until( looks_like_number($instance) );
 
   $hash->{Intance} = $instance;
-  $hash->{ObjectType} = $type;
+  $hash->{ObjectType} = $btype;
 
   #$attr{$name}{registrationIntervall} = 300 unless( AttrVal($name,"registrationIntervall",undef) );
   

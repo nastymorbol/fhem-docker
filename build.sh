@@ -6,7 +6,7 @@
 #export BASE_IMAGE_TAG="3.1"
 # Microsoft uses debian:buster-slim
 
-export DOCKER_VERSION="0.0.4.54"
+export DOCKER_VERSION="0.0.4.56"
 export BASE_IMAGE="debian"
 export BASE_IMAGE_TAG="buster-slim"
 export IMAGE_LAYER_SYS_EXT="0" 
@@ -68,7 +68,7 @@ echo "--- Docker Login\n"
 docker login
 echo
 echo "--- Start BUILD\n"
-docker buildx build $(print_env2) --platform linux/amd64,linux/arm/v7 -t nastymorbol/fhem:$DOCKER_VERSION -t nastymorbol/fhem:latest --push .
+docker buildx build $(print_env2) --platform linux/amd64,linux/arm/v7 -t deosag/opengate_fhem:$DOCKER_VERSION -t deosag/opengate_fhem:latest --push .
 # ARM64 derzeit nicht benötigt
 #linux/arm64 
 
